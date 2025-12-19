@@ -44,6 +44,14 @@ public class MainFrame extends JFrame implements DataPoolObserver {
             System.err.println("Failed to initialize LaF");
         }
 
+        // 设置窗口图标
+        try {
+            Image icon = Toolkit.getDefaultToolkit().getImage(getClass().getResource("/icon.png"));
+            setIconImage(icon);
+        } catch (Exception e) {
+            // 可选：打印异常或忽略
+        }
+
         setTitle("AuraTrader - Contract Kline Chart");
         setSize(1200, 800);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
