@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.0</version>
+        <version>3.4.4</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.galaxy</groupId>
@@ -27,7 +27,8 @@
         <url/>
     </scm>
     <properties>
-        <java.version>21</java.version>
+        <java.version>17</java.version>
+<!--        <jetty.version>11.0.24</jetty.version>-->
     </properties>
     <repositories>
     </repositories>
@@ -37,6 +38,7 @@
             <artifactId>spring-boot-starter</artifactId>
         </dependency>
 
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -45,47 +47,61 @@
         </dependency>
 
         <dependency>
+            <groupId>io.github.pig-mesh.ai</groupId>
+            <artifactId>deepseek-spring-boot-starter</artifactId>
+            <version>1.4.7</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fifesoft</groupId>
+            <artifactId>rsyntaxtextarea</artifactId>
+            <version>3.3.4</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.vladsch.flexmark</groupId>
+            <artifactId>flexmark-all</artifactId>
+            <version>0.64.8</version>
+        </dependency>
+
+        <dependency>
             <groupId>io.github.binance</groupId>
             <artifactId>binance-derivatives-trading-usds-futures</artifactId>
             <version>7.0.0</version>
-        </dependency>
-
-        <!-- Jetty 客户端 - binance-connector 需要 Jetty 11.x -->
-        <dependency>
-            <groupId>org.eclipse.jetty</groupId>
-            <artifactId>jetty-client</artifactId>
-            <version>11.0.24</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.jetty</groupId>
-            <artifactId>jetty-util</artifactId>
-            <version>11.0.24</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.jetty</groupId>
-            <artifactId>jetty-io</artifactId>
-            <version>11.0.24</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.jetty</groupId>
-            <artifactId>jetty-http</artifactId>
-            <version>11.0.24</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>websocket-jetty-client</artifactId>
+                    <groupId>org.eclipse.jetty.websocket</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.eclipse.jetty.websocket</groupId>
             <artifactId>websocket-jetty-client</artifactId>
-            <version>11.0.24</version>
+            <version>11.0.25</version>
         </dependency>
         <dependency>
-            <groupId>org.eclipse.jetty.websocket</groupId>
-            <artifactId>websocket-jetty-common</artifactId>
-            <version>11.0.24</version>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-client</artifactId>
+            <version>11.0.25</version>
         </dependency>
         <dependency>
-            <groupId>org.eclipse.jetty.websocket</groupId>
-            <artifactId>websocket-jetty-api</artifactId>
-            <version>11.0.24</version>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-io</artifactId>
+            <version>11.0.25</version>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-http</artifactId>
+            <version>11.0.25</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-util</artifactId>
+            <version>11.0.25</version>
+        </dependency>
+
+
 
         <dependency>
             <groupId>org.ta4j</groupId>

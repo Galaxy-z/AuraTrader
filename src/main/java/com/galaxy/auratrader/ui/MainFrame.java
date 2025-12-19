@@ -24,15 +24,17 @@ public class MainFrame extends JFrame implements DataPoolObserver {
 
     private final BinanceService binanceService;
     private final IndicatorService indicatorService;
+    private final AIChatFrame aiChatFrame;
     private KLineChartPanel chartPanel;
     private JComboBox<String> pairComboBox;
     private JComboBox<String> intervalComboBox;
     private JPanel balancePanel;
 
 
-    public MainFrame(BinanceService binanceService, IndicatorService indicatorService) {
+    public MainFrame(BinanceService binanceService, IndicatorService indicatorService, AIChatFrame aiChatFrame) {
         this.binanceService = binanceService;
         this.indicatorService = indicatorService;
+        this.aiChatFrame = aiChatFrame;
         DataPool.getInstance().addObserver(this); // 注册为数据池观察者
         initUI();
     }
@@ -58,6 +60,24 @@ public class MainFrame extends JFrame implements DataPoolObserver {
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
+        // Top area: toolbar + control panel
+        JToolBar toolBar = new JToolBar();
+        JButton aiButton = new JButton("AI");
+        aiButton.addActionListener(e -> {
+            if (aiChatFrame != null) {
+                aiChatFrame.setVisible(true);
+                aiChatFrame.toFront();
+            } else {
+                JOptionPane.showMessageDialog(MainFrame.this, "AI chat is not available", "Info", JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+        toolBar.add(aiButton);
+
+        // A container to hold toolbar and control panel vertically
+        JPanel topContainer = new JPanel();
+        topContainer.setLayout(new BorderLayout());
+        topContainer.add(toolBar, BorderLayout.NORTH);
+
         // Top Panel for controls
         JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 
@@ -80,7 +100,8 @@ public class MainFrame extends JFrame implements DataPoolObserver {
         loadButton.addActionListener(e -> loadData());
         controlPanel.add(loadButton);
 
-        add(controlPanel, BorderLayout.NORTH);
+        topContainer.add(controlPanel, BorderLayout.CENTER);
+        add(topContainer, BorderLayout.NORTH);
 
         // Chart Panel
         chartPanel = new KLineChartPanel();

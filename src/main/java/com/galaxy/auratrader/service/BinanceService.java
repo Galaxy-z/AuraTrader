@@ -121,7 +121,7 @@ public class BinanceService {
                     Date closeTime = new Date(k.getT());
 
                     KlineData latest = new KlineData(openTime, open, high, low, close, volume, closeTime);
-                    log.info("Received Kline: {}", latest);
+//                    log.info("Received Kline: {}", latest);
                     updateCache(latest);
 
                     // 只推送到数据池

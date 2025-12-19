@@ -10,6 +10,7 @@ import com.binance.connector.client.derivatives_trading_usds_futures.websocket.s
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.model.ContinuousContractKlineCandlestickStreamsResponse;
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.model.KlineCandlestickStreamsRequest;
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.model.KlineCandlestickStreamsResponse;
+import com.galaxy.auratrader.llm.chat.Chatter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,6 +26,9 @@ class AuraTraderApplicationTests {
     private DerivativesTradingUsdsFuturesRestApi derivativesTradingUsdsFuturesRestApi;
     @Autowired
     private DerivativesTradingUsdsFuturesWebSocketStreams derivativesTradingUsdsFuturesWebSocketStreams;
+
+    @Autowired
+    private Chatter chatter;
 
     @Test
     void contextLoads() throws InterruptedException {
@@ -50,6 +54,11 @@ class AuraTraderApplicationTests {
 
 
 
+    }
+
+    @Test
+    void chat(){
+        chatter.chat();
     }
 
 }
