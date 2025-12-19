@@ -12,6 +12,7 @@ import com.binance.connector.client.derivatives_trading_usds_futures.websocket.s
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.model.KlineCandlestickStreamsRequest;
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.model.KlineCandlestickStreamsResponse;
 import com.galaxy.auratrader.config.BinanceProperties;
+import com.galaxy.auratrader.model.DataPool;
 import com.galaxy.auratrader.model.KlineData;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +23,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
-import java.util.function.Consumer;
 
 @Service
 @Slf4j
@@ -40,6 +40,9 @@ public class BinanceService {
     private String currentSymbol;
     private String currentInterval;
 
+    // 新增 DataPool 单例
+    private final DataPool dataPool = DataPool.getInstance();
+
 
     public List<String> getPairs() {
         return binanceProperties.getPairs();
@@ -47,7 +50,9 @@ public class BinanceService {
 
     public List<FuturesAccountBalanceV2ResponseInner> getAccountBalance() {
         ApiResponse<FuturesAccountBalanceV3Response> response = restApi.futuresAccountBalanceV3(5000L);
-        return response.getData();
+        List<FuturesAccountBalanceV2ResponseInner> balances = response.getData();
+        dataPool.setBalances(balances); // 更新数据池
+        return balances;
     }
 
     public List<KlineData> getKlineData(String symbol, String intervalStr) {
@@ -70,7 +75,7 @@ public class BinanceService {
             cachedKlineData.clear();
             cachedKlineData.addAll(klineDataList);
         }
-
+        dataPool.setKlineData(klineDataList); // 更新数据池
         return klineDataList;
     }
 
@@ -92,7 +97,7 @@ public class BinanceService {
         }
     }
 
-    public void startStreaming(String symbol, String interval, Consumer<List<KlineData>> onUpdate) {
+    public void startStreaming(String symbol, String interval) {
         log.info("Starting streaming for {} at interval {}", symbol, interval);
         stopStreaming();
         this.currentSymbol = symbol;
@@ -119,9 +124,9 @@ public class BinanceService {
                     log.info("Received Kline: {}", latest);
                     updateCache(latest);
 
-                    if (onUpdate != null) {
-                        onUpdate.accept(getCachedKlineData());
-                    }
+                    // 只推送到数据池
+                    List<KlineData> current = getCachedKlineData();
+                    dataPool.setKlineData(current);
                 }
             } catch (InterruptedException e) {
                 log.info("Streaming stopped");

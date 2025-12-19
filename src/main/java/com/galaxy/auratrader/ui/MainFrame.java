@@ -2,6 +2,8 @@ package com.galaxy.auratrader.ui;
 
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.FuturesAccountBalanceV2ResponseInner;
 import com.formdev.flatlaf.FlatLightLaf;
+import com.galaxy.auratrader.model.DataPool;
+import com.galaxy.auratrader.model.DataPoolObserver;
 import com.galaxy.auratrader.model.KlineData;
 import com.galaxy.auratrader.service.BinanceService;
 import com.galaxy.auratrader.service.IndicatorService;
@@ -18,7 +20,7 @@ import java.util.List;
 @Component
 @Profile("!test")
 @Slf4j
-public class MainFrame extends JFrame {
+public class MainFrame extends JFrame implements DataPoolObserver {
 
     private final BinanceService binanceService;
     private final IndicatorService indicatorService;
@@ -31,6 +33,7 @@ public class MainFrame extends JFrame {
     public MainFrame(BinanceService binanceService, IndicatorService indicatorService) {
         this.binanceService = binanceService;
         this.indicatorService = indicatorService;
+        DataPool.getInstance().addObserver(this); // 注册为数据池观察者
         initUI();
     }
 
@@ -106,21 +109,14 @@ public class MainFrame extends JFrame {
             @Override
             protected void done() {
                 try {
-                    List<KlineData> data = get();
-                    chartPanel.updateData(data, pair + " - " + interval);
-
-                    // compute indicators and set to chart
-                    IndicatorResult ind = indicatorService.computeIndicators(data, 20, 14);
-                    chartPanel.setIndicators(ind);
+                    // 只需触发数据池更新，UI刷新由onDataUpdated统一处理
+                    // List<KlineData> data = get();
+                    // chartPanel.updateData(data, pair + " - " + interval);
+                    // IndicatorResult ind = indicatorService.computeIndicators(data, 20, 14);
+                    // chartPanel.setIndicators(ind);
 
                     // Start real-time streaming via service
-                    binanceService.startStreaming(pair, interval, updatedData -> {
-                        SwingUtilities.invokeLater(() -> {
-                            chartPanel.updateData(updatedData, pair + " - " + interval);
-                            IndicatorResult ind2 = indicatorService.computeIndicators(updatedData, 20, 14);
-                            chartPanel.setIndicators(ind2);
-                        });
-                    });
+                    binanceService.startStreaming(pair, interval);
                 } catch (Exception e) {
                     e.printStackTrace();
                     JOptionPane.showMessageDialog(MainFrame.this, "Error loading data: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -155,5 +151,29 @@ public class MainFrame extends JFrame {
             }
         };
         worker.execute();
+    }
+
+    @Override
+    public void onDataUpdated(DataPool.DataType type) {
+        // 确保在EDT线程刷新
+        SwingUtilities.invokeLater(() -> {
+            if (type == DataPool.DataType.KLINE) {
+                List<KlineData> data = DataPool.getInstance().getKlineData();
+                String pair = (String) pairComboBox.getSelectedItem();
+                String interval = (String) intervalComboBox.getSelectedItem();
+                chartPanel.updateData(data, (pair != null ? pair : "") + " - " + (interval != null ? interval : ""));
+                IndicatorResult ind = indicatorService.computeIndicators(data, 20, 14);
+                chartPanel.setIndicators(ind);
+            } else if (type == DataPool.DataType.BALANCE) {
+                List<FuturesAccountBalanceV2ResponseInner> balances = DataPool.getInstance().getBalances();
+                balancePanel.removeAll();
+                for (FuturesAccountBalanceV2ResponseInner balance : balances) {
+                    String text = String.format("%s: %.2f", balance.getAsset(), Double.parseDouble(balance.getBalance()));
+                    balancePanel.add(new JLabel(text));
+                }
+                balancePanel.revalidate();
+                balancePanel.repaint();
+            }
+        });
     }
 }
