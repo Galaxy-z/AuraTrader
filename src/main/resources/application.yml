@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: AuraTrader
+
+binance:
+  testnet: false
+  api:
+    key: ${BINANCE_API_KEY}
+    secret: ${BINANCE_API_SECRET}
+  pairs:
+    - BTCUSDT
+    - ETHUSDT
+    - BNBUSDT
+    - XRPUSDT
