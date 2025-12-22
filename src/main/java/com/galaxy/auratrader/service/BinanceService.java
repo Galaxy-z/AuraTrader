@@ -3,14 +3,14 @@ package com.galaxy.auratrader.service;
 import com.binance.connector.client.common.ApiResponse;
 import com.binance.connector.client.common.websocket.service.StreamBlockingQueueWrapper;
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.api.DerivativesTradingUsdsFuturesRestApi;
-import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.FuturesAccountBalanceV2ResponseInner;
-import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.FuturesAccountBalanceV3Response;
-import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.Interval;
-import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.KlineCandlestickDataResponse;
-import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.KlineCandlestickDataResponseItem;
+import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.*;
+import com.binance.connector.client.derivatives_trading_usds_futures.websocket.api.api.DerivativesTradingUsdsFuturesWebSocketApi;
+import com.binance.connector.client.derivatives_trading_usds_futures.websocket.api.model.StartUserDataStreamRequest;
+import com.binance.connector.client.derivatives_trading_usds_futures.websocket.api.model.StartUserDataStreamResponse;
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.api.DerivativesTradingUsdsFuturesWebSocketStreams;
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.model.KlineCandlestickStreamsRequest;
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.model.KlineCandlestickStreamsResponse;
+import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.model.UserDataStreamEventsResponse;
 import com.galaxy.auratrader.config.BinanceProperties;
 import com.galaxy.auratrader.model.DataPool;
 import com.galaxy.auratrader.model.KlineData;
@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 @Slf4j
@@ -32,6 +33,7 @@ public class BinanceService {
 
     private final DerivativesTradingUsdsFuturesRestApi restApi;
     private final DerivativesTradingUsdsFuturesWebSocketStreams webSocketStreams;
+    private final DerivativesTradingUsdsFuturesWebSocketApi webSocketApi;
     private final BinanceProperties binanceProperties;
     private final IndicatorService indicatorService;
 
@@ -49,14 +51,10 @@ public class BinanceService {
         return binanceProperties.getPairs();
     }
 
-    public List<FuturesAccountBalanceV2ResponseInner> getAccountBalance() {
-        ApiResponse<FuturesAccountBalanceV3Response> response = restApi.futuresAccountBalanceV3(5000L);
-        List<FuturesAccountBalanceV2ResponseInner> balances = response.getData();
-        dataPool.setBalances(balances); // 更新数据池
-        return balances;
-    }
-
     public List<KlineData> getKlineData(String symbol, String intervalStr) {
+        // 更新 DataPool 中的当前选择（保证其它 UI / 观察者能读取）
+        DataPool.getInstance().setCurrentPair(symbol);
+        DataPool.getInstance().setCurrentInterval(intervalStr);
         // Map string interval to Interval enum if necessary, or just pass string if library supports it.
         // The library uses Interval enum.
         Interval interval = Interval.valueOf("INTERVAL_" + intervalStr);
@@ -110,6 +108,10 @@ public class BinanceService {
         stopStreaming();
         this.currentSymbol = symbol;
         this.currentInterval = interval;
+
+        // 同步 DataPool 的当前选择
+        DataPool.getInstance().setCurrentPair(symbol);
+        DataPool.getInstance().setCurrentInterval(interval);
 
         KlineCandlestickStreamsRequest request = new KlineCandlestickStreamsRequest()
                 .symbol(symbol.toLowerCase()).interval(interval);
@@ -226,4 +228,93 @@ public class BinanceService {
                 return 60 * 1000;
         }
     }
+
+    // ------------------- Account Balance ------------------
+    public List<FuturesAccountBalanceV2ResponseInner> getAccountBalance() {
+        ApiResponse<FuturesAccountBalanceV3Response> response = restApi.futuresAccountBalanceV3(5000L);
+        List<FuturesAccountBalanceV2ResponseInner> balances = response.getData();
+        dataPool.setBalances(balances); // 更新数据池
+        return balances;
+    }
+
+    // -------------------- All Orders --------------------
+
+    //[
+    //  {
+    //    	"avgPrice": "0.00000",             // 平均成交价
+    //    	"clientOrderId": "abc",            // 用户自定义的订单号
+    //    	"cumQuote": "0",                   // 成交金额
+    //    	"executedQty": "0",               // 成交量
+    //    	"orderId": 1917641,                 // 系统订单号
+    //    	"origQty": "0.40",                // 原始委托数量
+    //    	"origType": "TRAILING_STOP_MARKET",// 触发前订单类型
+    //    	"price": "0",                     // 委托价格
+    //    	"reduceOnly": false,                // 是否仅减仓
+    //    	"side": "BUY",                    // 买卖方向
+    //    	"positionSide": "SHORT", // 持仓方向
+    //    	"status": "NEW",                  // 订单状态
+    //    	"stopPrice": "9300",              // 触发价，对`TRAILING_STOP_MARKET`无效
+    //    	"closePosition": false,             // 是否条件全平仓
+    //    	"symbol": "BTCUSDT",              // 交易对
+    //    	"time": 1579276756075,              // 订单时间
+    //    	"timeInForce": "GTC",             // 有效方法
+    //    	"type": "TRAILING_STOP_MARKET",   // 订单类型
+    //    	"activatePrice": "9020", // 跟踪止损激活价格, 仅`TRAILING_STOP_MARKET` 订单返回此字段
+    //    	"priceRate": "0.3",   // 跟踪止损回调比例, 仅`TRAILING_STOP_MARKET` 订单返回此字段
+    //    	"updateTime": 1579276756075,       // 更新时间
+    //    	"workingType": "CONTRACT_PRICE", // 条件价格触发类型
+    //   	"priceProtect": false,           // 是否开启条件单触发保护
+    //   	"priceMatch": "NONE",              //盘口价格下单模式
+    //   	"selfTradePreventionMode": "NONE", //订单自成交保护模式
+    //   	"goodTillDate": 0      //订单TIF为GTD时的自动取消时间
+    //   }
+    //]
+    public List<AllOrdersResponseInner> getAllOrders(String symbol) {
+        ApiResponse<AllOrdersResponse> allOrdersResponseApiResponse = restApi.allOrders(symbol, null, null, null, null, 500L);
+        AllOrdersResponse allOrders = allOrdersResponseApiResponse.getData();
+        List<AllOrdersResponseInner> list = new ArrayList<>();
+        for (AllOrdersResponseInner allOrder : allOrders) {
+            list.add(allOrder);
+        }
+        dataPool.setOrders(list); // 更新数据池
+        return list;
+    }
+
+
+    // -------------------- Account Update Stream --------------------
+    public void accountUpdateStream() {
+
+        StartUserDataStreamRequest startUserDataStreamRequest = new StartUserDataStreamRequest();
+        CompletableFuture<StartUserDataStreamResponse> future =
+                webSocketApi.startUserDataStream(startUserDataStreamRequest);
+        StartUserDataStreamResponse response = future.join();
+        System.out.println(response);
+        String listenKey = response.getResult().getListenKey();
+
+        StreamBlockingQueueWrapper<UserDataStreamEventsResponse> queueWrapper = webSocketStreams.userData(listenKey);
+        while (true) {
+            try {
+                UserDataStreamEventsResponse event = queueWrapper.take();
+//                System.out.println("Received user data event: " + event);
+                switch (event.getSchemaType()){
+                    case "ACCOUNT_UPDATE":
+                        System.out.println("Account Update Event: " + event.getAccountUpdate());
+                        break;
+                    case "ORDER_TRADE_UPDATE":
+                        System.out.println("Order Trade Update Event: " + event.getOrderTradeUpdate());
+                        break;
+                    default:
+                        System.out.println("Other Event Type: " + event.getSchemaType());
+                }
+
+
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+    }
+
 }

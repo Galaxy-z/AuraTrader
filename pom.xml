@@ -75,6 +75,13 @@
             <version>0.64.8</version>
         </dependency>
 
+        <!-- Added jsoup for HTML sanitization of rendered Markdown -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.16.1</version>
+        </dependency>
+
         <dependency>
             <groupId>io.github.binance</groupId>
             <artifactId>binance-derivatives-trading-usds-futures</artifactId>

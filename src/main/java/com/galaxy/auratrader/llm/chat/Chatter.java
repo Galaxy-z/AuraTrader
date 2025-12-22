@@ -119,7 +119,7 @@ public class Chatter {
                                 if (StrUtil.isEmpty(contentText)) {
                                     sink.tryEmitNext(new MessageEvent(MessageEvent.Type.CONTENT, "\n", null, null, true, seq.getAndIncrement()));
                                 }
-//                                sink.tryEmitNext(new MessageEvent(MessageEvent.Type.CONTENT, chunk, null, null, true, seq.getAndIncrement()));
+                                sink.tryEmitNext(new MessageEvent(MessageEvent.Type.CONTENT, chunk, null, null, true, seq.getAndIncrement()));
                                 contentText.append(chunk);
                             }
                             if (delta.toolCalls() != null) {
@@ -175,7 +175,7 @@ public class Chatter {
 
                 if ("stop".contentEquals(finishReason)) {
                     // final answer
-                    sink.tryEmitNext(new MessageEvent(MessageEvent.Type.FINAL, contentText.toString(), null, null, false, seq.getAndIncrement()));
+//                    sink.tryEmitNext(new MessageEvent(MessageEvent.Type.FINAL, contentText.toString(), null, null, false, seq.getAndIncrement()));
                     sink.tryEmitComplete();
                     return;
                 }

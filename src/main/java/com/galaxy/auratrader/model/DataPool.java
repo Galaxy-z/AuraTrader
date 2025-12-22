@@ -1,5 +1,6 @@
 package com.galaxy.auratrader.model;
 
+import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.AllOrdersResponseInner;
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.FuturesAccountBalanceV2ResponseInner;
 import com.galaxy.auratrader.service.IndicatorService.IndicatorResult;
 import lombok.Getter;
@@ -18,6 +19,15 @@ public class DataPool {
     private List<FuturesAccountBalanceV2ResponseInner> balances = Collections.emptyList();
     @Getter
     private IndicatorResult indicators = new IndicatorResult();
+
+    @Getter
+    private String currentPair = "";
+    @Getter
+    private String currentInterval = "";
+
+    // 新增：订单列表
+    @Getter
+    private List<AllOrdersResponseInner> orders = Collections.emptyList();
 
     private DataPool() {}
 
@@ -40,6 +50,22 @@ public class DataPool {
         notifyObservers(DataType.INDICATOR);
     }
 
+    public void setCurrentPair(String pair) {
+        this.currentPair = pair != null ? pair : "";
+        notifyObservers(DataType.PAIR);
+    }
+
+    public void setCurrentInterval(String interval) {
+        this.currentInterval = interval != null ? interval : "";
+        notifyObservers(DataType.INTERVAL);
+    }
+
+    // 新增：设置订单并通知
+    public void setOrders(List<AllOrdersResponseInner> orders) {
+        this.orders = orders != null ? orders : Collections.emptyList();
+        notifyObservers(DataType.ORDERS);
+    }
+
     public void addObserver(DataPoolObserver observer) {
         observers.add(observer);
     }
@@ -55,6 +81,6 @@ public class DataPool {
     }
 
     public enum DataType {
-        KLINE, BALANCE, INDICATOR
+        KLINE, BALANCE, INDICATOR, PAIR, INTERVAL, ORDERS
     }
 }

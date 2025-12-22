@@ -1,5 +1,6 @@
 package com.galaxy.auratrader.service;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.galaxy.auratrader.model.KlineData;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -29,6 +30,7 @@ public class IndicatorService {
     @Data
     @AllArgsConstructor
     public static class IndicatorPoint {
+        @JsonFormat(pattern = "yyyyMMdd HH:mm:ss", timezone = "GMT+8")
         private Date time;
         private double value;
     }

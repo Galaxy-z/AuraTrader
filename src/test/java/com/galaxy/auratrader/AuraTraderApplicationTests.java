@@ -3,6 +3,7 @@ package com.galaxy.auratrader;
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.api.DerivativesTradingUsdsFuturesRestApi;
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.api.DerivativesTradingUsdsFuturesWebSocketStreams;
 import com.galaxy.auratrader.llm.chat.Chatter;
+import com.galaxy.auratrader.service.BinanceService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,6 +17,8 @@ class AuraTraderApplicationTests {
     private DerivativesTradingUsdsFuturesRestApi derivativesTradingUsdsFuturesRestApi;
     @Autowired
     private DerivativesTradingUsdsFuturesWebSocketStreams derivativesTradingUsdsFuturesWebSocketStreams;
+    @Autowired
+    private BinanceService binanceService;
 
     @Autowired
     private Chatter chatter;
@@ -33,7 +36,14 @@ class AuraTraderApplicationTests {
 
     @Test
     void chat(){
-        chatter.chat();
+//        chatter.chat();
+        binanceService.accountUpdateStream();
+
+        try {
+            Thread.sleep(50000);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
     }
 
 }

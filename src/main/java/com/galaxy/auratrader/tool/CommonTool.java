@@ -12,33 +12,33 @@ import java.time.format.DateTimeFormatter;
 public class CommonTool {
 
 
-    @AITool(name = "getCityTemperature", description = "获取城市的气温", category = "utility", timeout = 2000)
-    public String getCityTemperature(
-            @AIParam(
-                    name = "cityName",
-                    description = "城市名称",
-                    required = true,
-                    type = "string"
-            )
-            String cityName
-    ) {
-        return 2+"°C";
-    }
+//    @AITool(name = "getCityTemperature", description = "获取城市的气温", category = "utility", timeout = 2000)
+//    public String getCityTemperature(
+//            @AIParam(
+//                    name = "cityName",
+//                    description = "城市名称",
+//                    required = true,
+//                    type = "string"
+//            )
+//            String cityName
+//    ) {
+//        return 2+"°C";
+//    }
+//
+//    @AITool(name = "getCityHumidity", description = "获取城市的湿度", category = "utility", timeout = 2000)
+//    public String getCityHumidity(
+//            @AIParam(
+//                    name = "cityName",
+//                    description = "城市名称",
+//                    required = true,
+//                    type = "string"
+//            )
+//            String cityName) {
+//
+//        return 60+"%";
+//    }
 
-    @AITool(name = "getCityHumidity", description = "获取城市的湿度", category = "utility", timeout = 2000)
-    public String getCityHumidity(
-            @AIParam(
-                    name = "cityName",
-                    description = "城市名称",
-                    required = true,
-                    type = "string"
-            )
-            String cityName) {
-
-        return 60+"%";
-    }
-
-    @AITool(name = "getCurrentTime", description = "获取当前时区时间，格式yyyy-MM-dd HH:mm:ss", category = "utility", timeout = 1000)
+    @AITool(name = "getCurrentTime", description = "获取本地时间，格式yyyy-MM-dd HH:mm:ss", category = "utility", timeout = 1000)
     public String getCurrentTime() {
         // Return current time in system default timezone formatted as yyyy-MM-dd HH:mm:ss
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");

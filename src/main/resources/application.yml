@@ -8,8 +8,8 @@ binance:
     key: ${BINANCE_API_KEY}
     secret: ${BINANCE_API_SECRET}
   pairs:
-    - BTCUSDT
     - ETHUSDT
+    - BTCUSDT
     - BNBUSDT
     - XRPUSDT
 
