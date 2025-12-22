@@ -1,6 +1,7 @@
 package com.galaxy.auratrader.model;
 
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.FuturesAccountBalanceV2ResponseInner;
+import com.galaxy.auratrader.service.IndicatorService.IndicatorResult;
 import lombok.Getter;
 
 import java.util.Collections;
@@ -15,6 +16,8 @@ public class DataPool {
     private List<KlineData> klineData = Collections.emptyList();
     @Getter
     private List<FuturesAccountBalanceV2ResponseInner> balances = Collections.emptyList();
+    @Getter
+    private IndicatorResult indicators = new IndicatorResult();
 
     private DataPool() {}
 
@@ -32,6 +35,11 @@ public class DataPool {
         notifyObservers(DataType.BALANCE);
     }
 
+    public void setIndicators(IndicatorResult indicators) {
+        this.indicators = indicators != null ? indicators : new IndicatorResult();
+        notifyObservers(DataType.INDICATOR);
+    }
+
     public void addObserver(DataPoolObserver observer) {
         observers.add(observer);
     }
@@ -47,6 +55,6 @@ public class DataPool {
     }
 
     public enum DataType {
-        KLINE, BALANCE
+        KLINE, BALANCE, INDICATOR
     }
 }

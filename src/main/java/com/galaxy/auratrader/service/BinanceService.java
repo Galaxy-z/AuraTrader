@@ -33,6 +33,7 @@ public class BinanceService {
     private final DerivativesTradingUsdsFuturesRestApi restApi;
     private final DerivativesTradingUsdsFuturesWebSocketStreams webSocketStreams;
     private final BinanceProperties binanceProperties;
+    private final IndicatorService indicatorService;
 
     private StreamBlockingQueueWrapper<KlineCandlestickStreamsResponse> currentStream;
     private Thread currentStreamThread;
@@ -76,6 +77,13 @@ public class BinanceService {
             cachedKlineData.addAll(klineDataList);
         }
         dataPool.setKlineData(klineDataList); // 更新数据池
+        // Compute indicators and update data pool so UI can read index data from DataPool
+        try {
+            var ind = indicatorService.computeIndicators(klineDataList, 20, 14);
+            dataPool.setIndicators(ind);
+        } catch (Exception e) {
+            log.warn("Failed to compute indicators", e);
+        }
         return klineDataList;
     }
 
@@ -127,6 +135,13 @@ public class BinanceService {
                     // 只推送到数据池
                     List<KlineData> current = getCachedKlineData();
                     dataPool.setKlineData(current);
+                    // recompute indicators and update pool
+                    try {
+                        var ind = indicatorService.computeIndicators(current, 20, 14);
+                        dataPool.setIndicators(ind);
+                    } catch (Exception e) {
+                        log.warn("Failed to compute indicators during streaming", e);
+                    }
                 }
             } catch (InterruptedException e) {
                 log.info("Streaming stopped");

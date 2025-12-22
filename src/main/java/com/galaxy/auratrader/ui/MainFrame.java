@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.util.List;
 
 @Component
@@ -29,6 +31,7 @@ public class MainFrame extends JFrame implements DataPoolObserver {
     private JComboBox<String> pairComboBox;
     private JComboBox<String> intervalComboBox;
     private JPanel balancePanel;
+    private JTabbedPane tabbedPane;
 
 
     public MainFrame(BinanceService binanceService, IndicatorService indicatorService, AIChatFrame aiChatFrame) {
@@ -62,6 +65,14 @@ public class MainFrame extends JFrame implements DataPoolObserver {
 
         // Top area: toolbar + control panel
         JToolBar toolBar = new JToolBar();
+//        // Balance button should be to the left of AI as requested
+//        JButton balanceButton = new JButton("Balance");
+//        balanceButton.addActionListener(e -> {
+//            if (tabbedPane != null) {
+//                tabbedPane.setSelectedComponent(balancePanel);
+//            }
+//        });
+//        toolBar.add(balanceButton);
         JButton aiButton = new JButton("AI");
         aiButton.addActionListener(e -> {
             if (aiChatFrame != null) {
@@ -105,17 +116,39 @@ public class MainFrame extends JFrame implements DataPoolObserver {
 
         // Chart Panel
         chartPanel = new KLineChartPanel();
-        add(chartPanel, BorderLayout.CENTER);
+        // Create tabbed pane and add chart and balance tabs
+        tabbedPane = new JTabbedPane();
 
         // Balance Panel
         balancePanel = new JPanel();
         balancePanel.setLayout(new BoxLayout(balancePanel, BoxLayout.Y_AXIS));
         balancePanel.setBorder(BorderFactory.createTitledBorder("Account Balance"));
         balancePanel.setPreferredSize(new Dimension(200, 0));
-        add(balancePanel, BorderLayout.EAST);
+
+        tabbedPane.addTab("Chart", chartPanel);
+        tabbedPane.addTab("Account Balance", balancePanel);
+
+        add(tabbedPane, BorderLayout.CENTER);
+
+        // Note: balancePanel is now part of the tabbed pane
 
         // Load balance initially
         loadBalance();
+
+        // 自动在主界面第一次显示时触发一次刷新（确保已有默认选择）
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowOpened(WindowEvent e) {
+                if (pairComboBox != null && pairComboBox.getItemCount() > 0 && pairComboBox.getSelectedIndex() < 0) {
+                    pairComboBox.setSelectedIndex(0);
+                }
+                if (intervalComboBox != null && intervalComboBox.getItemCount() > 0 && intervalComboBox.getSelectedIndex() < 0) {
+                    intervalComboBox.setSelectedIndex(0);
+                }
+                // 异步加载数据（loadData 本身会在后台线程处理）
+                loadData();
+            }
+        });
     }
 
     private void loadData() {
@@ -147,7 +180,7 @@ public class MainFrame extends JFrame implements DataPoolObserver {
                     // Start real-time streaming via service
                     binanceService.startStreaming(pair, interval);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    log.error("Error loading data", e);
                     JOptionPane.showMessageDialog(MainFrame.this, "Error loading data: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
             }
@@ -168,13 +201,22 @@ public class MainFrame extends JFrame implements DataPoolObserver {
                     List<FuturesAccountBalanceV2ResponseInner> balances = get();
                     balancePanel.removeAll();
                     for (FuturesAccountBalanceV2ResponseInner balance : balances) {
-                        String text = String.format("%s: %.2f", balance.getAsset(), Double.parseDouble(balance.getBalance()));
+                        String balStr = balance.getBalance();
+                        double bal = 0.0;
+                        if (balStr != null) {
+                            try {
+                                bal = Double.parseDouble(balStr);
+                            } catch (NumberFormatException ex) {
+                                log.warn("Failed to parse balance for {}: {}", balance.getAsset(), balStr, ex);
+                            }
+                        }
+                        String text = String.format("%s: %.2f", balance.getAsset(), bal);
                         balancePanel.add(new JLabel(text));
                     }
                     balancePanel.revalidate();
                     balancePanel.repaint();
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    log.error("Error loading balance", e);
                     JOptionPane.showMessageDialog(MainFrame.this, "Error loading balance: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
             }
@@ -191,17 +233,35 @@ public class MainFrame extends JFrame implements DataPoolObserver {
                 String pair = (String) pairComboBox.getSelectedItem();
                 String interval = (String) intervalComboBox.getSelectedItem();
                 chartPanel.updateData(data, (pair != null ? pair : "") + " - " + (interval != null ? interval : ""));
-                IndicatorResult ind = indicatorService.computeIndicators(data, 20, 14);
+                // Prefer indicators from DataPool if available (keeps UI logic out of data source)
+                IndicatorResult ind = DataPool.getInstance().getIndicators();
+                if (ind == null || ind.getMa() == null || ind.getMa().isEmpty()) {
+                    // fallback: compute if pool not populated
+                    ind = indicatorService.computeIndicators(data, 20, 14);
+                }
                 chartPanel.setIndicators(ind);
             } else if (type == DataPool.DataType.BALANCE) {
                 List<FuturesAccountBalanceV2ResponseInner> balances = DataPool.getInstance().getBalances();
                 balancePanel.removeAll();
                 for (FuturesAccountBalanceV2ResponseInner balance : balances) {
-                    String text = String.format("%s: %.2f", balance.getAsset(), Double.parseDouble(balance.getBalance()));
+                    String balStr = balance.getBalance();
+                    double bal = 0.0;
+                    if (balStr != null) {
+                        try {
+                            bal = Double.parseDouble(balStr);
+                        } catch (NumberFormatException ex) {
+                            log.warn("Failed to parse balance for {}: {}", balance.getAsset(), balStr, ex);
+                        }
+                    }
+                    String text = String.format("%s: %.2f", balance.getAsset(), bal);
                     balancePanel.add(new JLabel(text));
                 }
                 balancePanel.revalidate();
                 balancePanel.repaint();
+            } else if (type == DataPool.DataType.INDICATOR) {
+                // Update chart with new indicators
+                IndicatorResult ind = DataPool.getInstance().getIndicators();
+                chartPanel.setIndicators(ind);
             }
         });
     }
