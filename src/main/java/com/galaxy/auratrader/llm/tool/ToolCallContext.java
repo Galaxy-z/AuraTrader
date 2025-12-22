@@ -1,5 +1,8 @@
 package com.galaxy.auratrader.llm.tool;
 
+import cn.hutool.core.util.StrUtil;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Builder;
 import lombok.Data;
 
@@ -44,6 +47,11 @@ public class ToolCallContext {
     private Map<String, Object> parameters;
 
     /**
+     * 原始调用参数（JSON字符串）
+     */
+    private String rawParameters;
+
+    /**
      * 调用结果
      */
     private String result;
@@ -74,5 +82,18 @@ public class ToolCallContext {
         SUCCESS,    // 执行成功
         FAILED,     // 执行失败
         TIMEOUT     // 执行超时
+    }
+
+    public void initParameters() {
+        if (StrUtil.isEmpty(rawParameters)){
+            return;
+        }
+
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            this.parameters = mapper.readValue(rawParameters, new TypeReference<>() {});
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse rawParameters: " + rawParameters, e);
+        }
     }
 }

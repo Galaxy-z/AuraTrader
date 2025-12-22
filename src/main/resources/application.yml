@@ -12,3 +12,7 @@ binance:
     - ETHUSDT
     - BNBUSDT
     - XRPUSDT
+
+proxy:
+  host: ${PROXY_HOST}
+  port: ${PROXY_PORT}

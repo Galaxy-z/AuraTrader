@@ -237,6 +237,7 @@ public class AIToolRegistry {
      * 执行工具调用（带监控和统计）
      */
     public String executeTool(ToolCallContext context) {
+        context.initParameters();
         String toolName = context.getToolName();
 
         // 更新上下文状态

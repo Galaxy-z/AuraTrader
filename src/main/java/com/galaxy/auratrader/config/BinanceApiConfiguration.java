@@ -29,6 +29,14 @@ public class BinanceApiConfiguration {
     @Value("${binance.testnet:false}")
     private Boolean testnet;
 
+    // Read proxy settings from environment / .env / application properties.
+    // If not provided (empty host or port <= 0) we won't use a proxy.
+    @Value("${proxy.host:}")
+    private String proxyHost;
+
+    @Value("${proxy.port:0}")
+    private Integer proxyPort;
+
     @Bean
     public DerivativesTradingUsdsFuturesRestApi derivativesTradingUsdsFuturesRestApi() {
         ClientConfiguration clientConfiguration =
@@ -36,7 +44,10 @@ public class BinanceApiConfiguration {
         if(testnet) {
             clientConfiguration.setUrl("https://testnet.binancefuture.com");
         }
-        clientConfiguration.setProxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress("localhost", 7897)));
+        // Only set HTTP proxy if host is provided and port is a positive integer
+        if (proxyHost != null && !proxyHost.trim().isEmpty() && proxyPort != null && proxyPort > 0) {
+            clientConfiguration.setProxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(proxyHost.trim(), proxyPort)));
+        }
         SignatureConfiguration signatureConfiguration = new SignatureConfiguration();
         signatureConfiguration.setApiKey(apiKey);
         signatureConfiguration.setSecretKey(secretKey);
@@ -51,7 +62,10 @@ public class BinanceApiConfiguration {
         // if you want the connection to be auto logged on:
         // https://developers.binance.com/docs/binance-spot-api-docs/websocket-api/authentication-requests
         clientConfiguration.setAutoLogon(true);
-        clientConfiguration.setWebSocketProxy(new HttpProxy("localhost", 7897));
+        // Only set WebSocket proxy if configured
+        if (proxyHost != null && !proxyHost.trim().isEmpty() && proxyPort != null && proxyPort > 0) {
+            clientConfiguration.setWebSocketProxy(new HttpProxy(proxyHost.trim(), proxyPort));
+        }
         SignatureConfiguration signatureConfiguration = new SignatureConfiguration();
         signatureConfiguration.setApiKey(apiKey);
         signatureConfiguration.setSecretKey(secretKey);
@@ -65,7 +79,10 @@ public class BinanceApiConfiguration {
         if (testnet){
             clientConfiguration.setUrl("wss://fstream.binancefuture.com/market/stream");
         }
-        clientConfiguration.setWebSocketProxy(new HttpProxy("localhost", 7897));
+        // Only set WebSocket streams proxy if configured
+        if (proxyHost != null && !proxyHost.trim().isEmpty() && proxyPort != null && proxyPort > 0) {
+            clientConfiguration.setWebSocketProxy(new HttpProxy(proxyHost.trim(), proxyPort));
+        }
         SignatureConfiguration signatureConfiguration = new SignatureConfiguration();
         signatureConfiguration.setApiKey(apiKey);
         signatureConfiguration.setSecretKey(secretKey);
