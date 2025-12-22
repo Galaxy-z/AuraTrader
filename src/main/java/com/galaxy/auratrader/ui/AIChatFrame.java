@@ -1,7 +1,6 @@
 package com.galaxy.auratrader.ui;
 
 import com.galaxy.auratrader.llm.chat.Chatter;
-import io.github.pigmesh.ai.deepseek.core.chat.Delta;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -14,7 +13,6 @@ import javax.swing.text.StyledDocument;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Component
 @Profile("!test")
@@ -73,24 +71,56 @@ public class AIChatFrame extends JFrame {
         appendStyledText("User: " + prompt + "\n", userStyle());
         inputField.setText("");
 
-        // Subscribe to stream and append chunks as they arrive
-        AtomicBoolean reasoningFinished = new AtomicBoolean(false);
-        chatter.streamChatFlux(prompt).subscribe(response -> {
-            Delta delta = response.choices().get(0).delta();
-            if (delta.reasoningContent() != null) {
-                SwingUtilities.invokeLater(() -> appendStyledText(delta.reasoningContent(), reasoningStyle()));
-            }
-            if (delta.content() != null) {
-                if (!reasoningFinished.get()) {
-                    SwingUtilities.invokeLater(() -> appendStyledText("\n", reasoningStyle()));
-                    reasoningFinished.set(true);
-                }
-                SwingUtilities.invokeLater(() -> appendStyledText(delta.content(), contentStyle()));
+        // Disable input to prevent concurrent requests
+        inputField.setEnabled(false);
+        sendButton.setEnabled(false);
+
+        // Subscribe to the new streaming tool-aware API and append events as they arrive
+        chatter.streamToolCall(prompt, true).subscribe(ev -> {
+            // ev.type is an enum: REASONING, CONTENT, TOOL_CALL, TOOL_RESULT, FINAL, ERROR
+            switch (ev.type) {
+                case REASONING:
+                    SwingUtilities.invokeLater(() -> appendStyledText(ev.text, reasoningStyle()));
+                    break;
+                case CONTENT:
+                    SwingUtilities.invokeLater(() -> appendStyledText(ev.text, contentStyle()));
+                    break;
+                case TOOL_CALL:
+                    SwingUtilities.invokeLater(() -> appendStyledText("[Tool call: " + (ev.toolName == null ? "" : ev.toolName) + "] " + (ev.text == null ? "" : ev.text) + "\n", toolCallStyle()));
+                    break;
+                case TOOL_RESULT:
+                    SwingUtilities.invokeLater(() -> appendStyledText("[Tool result: " + (ev.toolName == null ? "" : ev.toolName) + "] " + (ev.text == null ? "" : ev.text) + "\n", toolResultStyle()));
+                    break;
+                case FINAL:
+                    SwingUtilities.invokeLater(() -> {
+                        appendStyledText("\nAI: " + (ev.text == null ? "" : ev.text) + "\n", finalStyle());
+                        // re-enable input
+                        inputField.setEnabled(true);
+                        sendButton.setEnabled(true);
+                    });
+                    break;
+                case ERROR:
+                    SwingUtilities.invokeLater(() -> {
+                        appendStyledText("[Error] " + (ev.text == null ? ev.toolName : ev.text) + "\n", errorStyle());
+                        // re-enable input on error
+                        inputField.setEnabled(true);
+                        sendButton.setEnabled(true);
+                    });
+                    break;
             }
         }, error -> {
-            SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(AIChatFrame.this, "AI error: " + error.getMessage(), "Error", JOptionPane.ERROR_MESSAGE));
+            SwingUtilities.invokeLater(() -> {
+                JOptionPane.showMessageDialog(AIChatFrame.this, "AI error: " + error.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                inputField.setEnabled(true);
+                sendButton.setEnabled(true);
+            });
+        }, () -> {
+            // onComplete: ensure inputs enabled
+            SwingUtilities.invokeLater(() -> {
+                inputField.setEnabled(true);
+                sendButton.setEnabled(true);
+            });
         });
-
 
         // Make sure window is visible
         if (!isVisible()) {
@@ -126,6 +156,32 @@ public class AIChatFrame extends JFrame {
     private AttributeSet contentStyle() {
         SimpleAttributeSet s = new SimpleAttributeSet();
         StyleConstants.setForeground(s, Color.BLACK);
+        return s;
+    }
+
+    private AttributeSet toolCallStyle() {
+        SimpleAttributeSet s = new SimpleAttributeSet();
+        StyleConstants.setForeground(s, new Color(0x6A1B9A)); // purple
+        StyleConstants.setItalic(s, true);
+        return s;
+    }
+
+    private AttributeSet toolResultStyle() {
+        SimpleAttributeSet s = new SimpleAttributeSet();
+        StyleConstants.setForeground(s, new Color(0x2E7D32)); // green
+        return s;
+    }
+
+    private AttributeSet finalStyle() {
+        SimpleAttributeSet s = new SimpleAttributeSet();
+        StyleConstants.setForeground(s, Color.BLACK);
+        StyleConstants.setBold(s, true);
+        return s;
+    }
+
+    private AttributeSet errorStyle() {
+        SimpleAttributeSet s = new SimpleAttributeSet();
+        StyleConstants.setForeground(s, Color.RED);
         return s;
     }
 }
