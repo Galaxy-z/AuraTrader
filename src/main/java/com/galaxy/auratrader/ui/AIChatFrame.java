@@ -2,6 +2,7 @@ package com.galaxy.auratrader.ui;
 
 import com.galaxy.auratrader.llm.chat.Chatter;
 import io.github.pigmesh.ai.deepseek.core.chat.Delta;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import javax.swing.*;
@@ -16,6 +17,7 @@ import java.awt.event.ActionListener;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Component
+@Profile("!test")
 public class AIChatFrame extends JFrame {
     private final Chatter chatter;
 

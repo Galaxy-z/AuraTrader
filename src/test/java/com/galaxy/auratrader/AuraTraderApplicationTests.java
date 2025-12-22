@@ -32,28 +32,13 @@ class AuraTraderApplicationTests {
 
     @Test
     void contextLoads() throws InterruptedException {
+        chatter.functionTest();
 
-        //[
-        // {
-        //   "accountAlias": "SgsR",              // 账户唯一识别码
-        //   "asset": "USDT",  	                // 资产
-        //   "balance": "122607.35137903",        // 总余额
-        //   "crossWalletBalance": "23.72469206", // 全仓余额
-        //   "crossUnPnl": "0.00000000",           // 全仓持仓未实现盈亏
-        //   "availableBalance": "23.72469206",   // 下单可用余额
-        //   "maxWithdrawAmount": "23.72469206",  // 最大可转出余额
-        //   "marginAvailable": true,            // 是否可用作联合保证金
-        //   "updateTime": 1617939110373
-        // }
-        //]
-
-        ApiResponse<FuturesAccountBalanceV3Response> response = derivativesTradingUsdsFuturesRestApi.futuresAccountBalanceV3(5000L);
-        for (FuturesAccountBalanceV2ResponseInner datum : response.getData()) {
-
+        try {
+            Thread.sleep(50000);
+        }catch (Exception e){
+            e.printStackTrace();
         }
-
-
-
     }
 
     @Test

@@ -36,7 +36,7 @@ public class BinanceApiConfiguration {
         if(testnet) {
             clientConfiguration.setUrl("https://testnet.binancefuture.com");
         }
-        clientConfiguration.setProxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress("localhost", 35827)));
+        clientConfiguration.setProxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress("localhost", 7897)));
         SignatureConfiguration signatureConfiguration = new SignatureConfiguration();
         signatureConfiguration.setApiKey(apiKey);
         signatureConfiguration.setSecretKey(secretKey);
@@ -51,7 +51,7 @@ public class BinanceApiConfiguration {
         // if you want the connection to be auto logged on:
         // https://developers.binance.com/docs/binance-spot-api-docs/websocket-api/authentication-requests
         clientConfiguration.setAutoLogon(true);
-        clientConfiguration.setWebSocketProxy(new HttpProxy("localhost", 35827));
+        clientConfiguration.setWebSocketProxy(new HttpProxy("localhost", 7897));
         SignatureConfiguration signatureConfiguration = new SignatureConfiguration();
         signatureConfiguration.setApiKey(apiKey);
         signatureConfiguration.setSecretKey(secretKey);
@@ -65,7 +65,7 @@ public class BinanceApiConfiguration {
         if (testnet){
             clientConfiguration.setUrl("wss://fstream.binancefuture.com/market/stream");
         }
-        clientConfiguration.setWebSocketProxy(new HttpProxy("localhost", 35827));
+        clientConfiguration.setWebSocketProxy(new HttpProxy("localhost", 7897));
         SignatureConfiguration signatureConfiguration = new SignatureConfiguration();
         signatureConfiguration.setApiKey(apiKey);
         signatureConfiguration.setSecretKey(secretKey);
