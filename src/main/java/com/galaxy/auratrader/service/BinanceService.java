@@ -5,30 +5,30 @@ import com.binance.connector.client.common.websocket.service.StreamBlockingQueue
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.api.DerivativesTradingUsdsFuturesRestApi;
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.*;
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.api.api.DerivativesTradingUsdsFuturesWebSocketApi;
-import com.binance.connector.client.derivatives_trading_usds_futures.websocket.api.model.StartUserDataStreamRequest;
+import com.binance.connector.client.derivatives_trading_usds_futures.websocket.api.model.*;
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.api.model.StartUserDataStreamResponse;
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.api.DerivativesTradingUsdsFuturesWebSocketStreams;
-import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.model.KlineCandlestickStreamsRequest;
-import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.model.KlineCandlestickStreamsResponse;
-import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.model.UserDataStreamEventsResponse;
+import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.model.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.galaxy.auratrader.config.BinanceProperties;
-import com.galaxy.auratrader.model.DataPool;
-import com.galaxy.auratrader.model.KlineData;
+import com.galaxy.auratrader.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class BinanceService {
+public class BinanceService implements DisposableBean {
 
 
     private final DerivativesTradingUsdsFuturesRestApi restApi;
@@ -45,6 +45,19 @@ public class BinanceService {
 
     // 新增 DataPool 单例
     private final DataPool dataPool = DataPool.getInstance();
+
+    // Account update stream state
+    private StreamBlockingQueueWrapper<UserDataStreamEventsResponse> accountQueue;
+    private Thread accountThread;
+    private String accountListenKey;
+
+    // Scheduler for keep-alive of user data stream (prevent listenKey from expiring)
+    private final ScheduledExecutorService accountScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "account-keepalive-scheduler");
+        t.setDaemon(true);
+        return t;
+    });
+    private ScheduledFuture<?> accountKeepAliveFuture;
 
 
     public List<String> getPairs() {
@@ -243,31 +256,31 @@ public class BinanceService {
     //  {
     //    	"avgPrice": "0.00000",             // 平均成交价
     //    	"clientOrderId": "abc",            // 用户自定义的订单号
-    //    	"cumQuote": "0",                   // 成交金额
-    //    	"executedQty": "0",               // 成交量
-    //    	"orderId": 1917641,                 // 系统订单号
-    //    	"origQty": "0.40",                // 原始委托数量
-    //    	"origType": "TRAILING_STOP_MARKET",// 触发前订单类型
-    //    	"price": "0",                     // 委托价格
-    //    	"reduceOnly": false,                // 是否仅减仓
-    //    	"side": "BUY",                    // 买卖方向
-    //    	"positionSide": "SHORT", // 持仓方向
-    //    	"status": "NEW",                  // 订单状态
-    //    	"stopPrice": "9300",              // 触发价，对`TRAILING_STOP_MARKET`无效
-    //    	"closePosition": false,             // 是否条件全平仓
-    //    	"symbol": "BTCUSDT",              // 交易对
-    //    	"time": 1579276756075,              // 订单时间
-    //    	"timeInForce": "GTC",             // 有效方法
-    //    	"type": "TRAILING_STOP_MARKET",   // 订单类型
-    //    	"activatePrice": "9020", // 跟踪止损激活价格, 仅`TRAILING_STOP_MARKET` 订单返回此字段
-    //    	"priceRate": "0.3",   // 跟踪止损回调比例, 仅`TRAILING_STOP_MARKET` 订单返回此字段
-    //    	"updateTime": 1579276756075,       // 更新时间
-    //    	"workingType": "CONTRACT_PRICE", // 条件价格触发类型
-    //   	"priceProtect": false,           // 是否开启条件单触发保护
-    //   	"priceMatch": "NONE",              //盘口价格下单模式
-    //   	"selfTradePreventionMode": "NONE", //订单自成交保护模式
-    //   	"goodTillDate": 0      //订单TIF为GTD时的自动取消时间
-    //   }
+    //    		"cumQuote": "0",                   // 成交金额
+    //    		"executedQty": "0",               // 成交量
+    //    		"orderId": 1917641,                 // 系统订单号
+    //    		"origQty": "0.40",                // 原始委托数量
+    //    		"origType": "TRAILING_STOP_MARKET",// 触发前订单类型
+    //    		"price": "0",                     // 委托价格
+    //    		"reduceOnly": false,                // 是否仅减仓
+    //    		"side": "BUY",                    // 买卖方向
+    //    		"positionSide": "SHORT", // 持仓方向
+    //    		"status": "NEW",                  // 订单状态
+    //    		"stopPrice": "9300",              // 触发价，对`TRAILING_STOP_MARKET`无效
+    //    		"closePosition": false,             // 是否条件全平仓
+    //    		"symbol": "BTCUSDT",              // 交易对
+    //    		"time": 1579276756075,              // 订单时间
+    //    		"timeInForce": "GTC",             // 有效方法
+    //    		"type": "TRAILING_STOP_MARKET",   // 订单类型
+    //    		"activatePrice": "9020", // 跟踪止损激活价格, 仅`TRAILING_STOP_MARKET` 订单返回此字段
+    //    		"priceRate": "0.3",   // 跟踪止损回调比例, 仅`TRAILING_STOP_MARKET` 订单返回此字段
+    //    		"updateTime": 1579276756075,       // 更新时间
+    //    		"workingType": "CONTRACT_PRICE", // 条件价格触发类型
+    //    		"priceProtect": false,           // 是否开启条件单触发保护
+    //    		"priceMatch": "NONE",              //盘口价格下单模式
+    //    		"selfTradePreventionMode": "NONE", //订单自成交保护模式
+    //    		"goodTillDate": 0      //订单TIF为GTD时的自动取消时间
+    //  }
     //]
     public List<AllOrdersResponseInner> getAllOrders(String symbol) {
         ApiResponse<AllOrdersResponse> allOrdersResponseApiResponse = restApi.allOrders(symbol, null, null, null, null, 500L);
@@ -282,39 +295,259 @@ public class BinanceService {
 
 
     // -------------------- Account Update Stream --------------------
-    public void accountUpdateStream() {
-
-        StartUserDataStreamRequest startUserDataStreamRequest = new StartUserDataStreamRequest();
-        CompletableFuture<StartUserDataStreamResponse> future =
-                webSocketApi.startUserDataStream(startUserDataStreamRequest);
-        StartUserDataStreamResponse response = future.join();
-        System.out.println(response);
-        String listenKey = response.getResult().getListenKey();
-
-        StreamBlockingQueueWrapper<UserDataStreamEventsResponse> queueWrapper = webSocketStreams.userData(listenKey);
-        while (true) {
+    public void startAccountUpdateStream() {
+        if (accountThread != null && accountThread.isAlive()) {
+            log.info("Account update stream already running");
+            return;
+        }
+        accountThread = new Thread(() -> {
             try {
-                UserDataStreamEventsResponse event = queueWrapper.take();
-//                System.out.println("Received user data event: " + event);
-                switch (event.getSchemaType()){
-                    case "ACCOUNT_UPDATE":
-                        System.out.println("Account Update Event: " + event.getAccountUpdate());
-                        break;
-                    case "ORDER_TRADE_UPDATE":
-                        System.out.println("Order Trade Update Event: " + event.getOrderTradeUpdate());
-                        break;
-                    default:
-                        System.out.println("Other Event Type: " + event.getSchemaType());
+                StartUserDataStreamRequest startUserDataStreamRequest = new StartUserDataStreamRequest();
+                CompletableFuture<StartUserDataStreamResponse> future =
+                        webSocketApi.startUserDataStream(startUserDataStreamRequest);
+                StartUserDataStreamResponse response = future.join();
+                log.info("Started user data stream: {}", response);
+                accountListenKey = response.getResult().getListenKey();
+
+                // schedule keep-alive every 50 minutes to prevent listenKey from expiring (expires in 60 minutes)
+                try {
+                    if (accountKeepAliveFuture != null && !accountKeepAliveFuture.isDone()) {
+                        accountKeepAliveFuture.cancel(true);
+                    }
+                    accountKeepAliveFuture = accountScheduler.scheduleAtFixedRate(() -> {
+                        try {
+                            keepAliveAccountUpdateStream();
+                        } catch (Exception e) {
+                            log.warn("Keepalive task failed", e);
+                        }
+                    }, 50, 50, TimeUnit.MINUTES);
+                } catch (Exception e) {
+                    log.warn("Failed to schedule keepalive task", e);
                 }
 
+                accountQueue = webSocketStreams.userData(accountListenKey);
+                while (!Thread.currentThread().isInterrupted()) {
+                    UserDataStreamEventsResponse event = accountQueue.take();
+                    if (event == null) continue;
+                    Object actualInstance = event.getActualInstance();
+                    if  (actualInstance == null) continue;
+                    String title = "";
+                    String message = "";
+                    ObjectMapper mapper = new ObjectMapper();
+                    switch (actualInstance.getClass().getSimpleName()) {
+                        case "TradeLite":
+                            // Build a typed TradeLiteEvent and add as a notification for UI
+                            try {
+                                TradeLiteEvent tle = TradeLiteEvent.fromObject((TradeLite)actualInstance);
+                                title = "精简交易推送";
+                                message = mapper.writeValueAsString(tle);
+                                log.info("Received trade event: {} - {}", title, message);
+                                Notification n = new Notification(new Date(), title, message);
+                                dataPool.addNotification(n);
+                            } catch (Exception ex) {
+                                // Fallback: raw string
+                                title = "精简交易推送";
+                                message = actualInstance.toString();
+                                log.warn("Failed to parse TradeLite instance, using raw string: {}", ex.getMessage());
+                                Notification n = new Notification(new Date(), title, message);
+                                dataPool.addNotification(n);
+                            }
+                             continue;
+                        case "OrderTradeUpdate":
+                            try {
+                                OrderTradeUpdateEvent otue = OrderTradeUpdateEvent.fromObject((OrderTradeUpdate)actualInstance);
+                                title = "订单交易更新";
+                                message = mapper.writeValueAsString(otue);
+                                log.info("Received order trade update: {} - {}", title, message);
+                                Notification on = new Notification(new Date(), title, message);
+                                dataPool.addNotification(on);
+                            } catch (Exception ex) {
+                                title = "订单交易更新";
+                                message = actualInstance.toString();
+                                log.warn("Failed to parse OrderTradeUpdate instance, using raw string: {}", ex.getMessage());
+                                Notification on = new Notification(new Date(), title, message);
+                                dataPool.addNotification(on);
+                            }
+                             continue;
+                        case "AccountUpdate":
+                            try {
+                                AccountUpdateEvent aue = AccountUpdateEvent.fromObject((AccountUpdate)actualInstance);
+                                title = "账户更新";
+                                message = mapper.writeValueAsString(aue);
+                                log.info("Received account update: {} - {}", title, message);
+                                Notification an = new Notification(new Date(), title, message);
+                                dataPool.addNotification(an);
+                            } catch (Exception ex) {
+                                title = "账户更新";
+                                message = actualInstance.toString();
+                                log.warn("Failed to parse AccountUpdate instance, using raw string: {}", ex.getMessage());
+                                Notification an = new Notification(new Date(), title, message);
+                                dataPool.addNotification(an);
+                            }
+                             continue;
+                        case "AccountConfigUpdate":
+                            try {
+                                AccountConfigUpdate i = (AccountConfigUpdate)actualInstance;
+                                AccountConfigUpdateAc ac = i.getAc();
+                                String symbol = ac.getsLowerCase();
+                                Long leverage = ac.getlLowerCase();
+                                if (Objects.equals(dataPool.getCurrentPair(), symbol)) {
+                                    dataPool.setLeverage(leverage); // 更新 DataPool 中的杠杆
+                                }
+                                title = "账户配置更新";
+                                message = mapper.writeValueAsString(i);
+                                log.info("Received account config update: {} - {}", title, message);
+                                Notification acn = new Notification(new Date(), title, message);
+                                dataPool.addNotification(acn);
+                            } catch (Exception ex) {
+                                title = "账户配置更新";
+                                message = actualInstance.toString();
+                                log.warn("Failed to parse AccountConfigUpdate instance, using raw string: {}", ex.getMessage());
+                                Notification acn = new Notification(new Date(), title, message);
+                                dataPool.addNotification(acn);
+                            }
+                             continue;
 
-
-            } catch (InterruptedException e) {
+                        default:
+                            // Fallback for unknown types
+                            log.info("Received unknown event type: {}", actualInstance);
+                            break;
+                    }
+                    // Ensure we have a title/message to display; fallback to schema or raw event
+                    if (title.isEmpty()) {
+                        String schema = event.getSchemaType();
+                        title = schema != null ? schema : "User Data";
+                        message = event.toString();
+                    }
+                    log.info("Received account event: {} - {}", title, message);
+                    Notification n = new Notification(new Date(), title, message);
+                    dataPool.addNotification(n);
+                }
+            } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
-                break;
+                log.info("Account update stream interrupted");
+            } catch (Exception e) {
+                log.error("Error in account update stream", e);
             }
-        }
-
+        }, "account-update-stream");
+        accountThread.setDaemon(true);
+        accountThread.start();
     }
 
+    public void stopAccountUpdateStream() {
+        if (accountThread != null && accountThread.isAlive()) {
+            accountThread.interrupt();
+        }
+        accountThread = null;
+        accountQueue = null;
+        accountListenKey = null;
+        // cancel scheduled keep-alive
+        if (accountKeepAliveFuture != null && !accountKeepAliveFuture.isDone()) {
+            accountKeepAliveFuture.cancel(true);
+        }
+        accountKeepAliveFuture = null;
+    }
+
+    public void keepAliveAccountUpdateStream() {
+        if (accountListenKey == null) {
+            log.warn("No account listen key to keep alive");
+            return;
+        }
+        webSocketApi.keepaliveUserDataStream(new KeepaliveUserDataStreamRequest())
+                .thenAccept(response -> log.info("Kept alive user data stream: {}", response))
+                .exceptionally(ex -> {
+                    log.error("Failed to keep alive user data stream", ex);
+                    return null;
+                });
+    }
+
+    public void closeAccountUpdateStream() {
+        if (accountListenKey == null) {
+            log.warn("No account listen key to close");
+            return;
+        }
+        webSocketApi.closeUserDataStream(new CloseUserDataStreamRequest())
+                .thenAccept(response -> log.info("Closed user data stream: {}", response))
+                .exceptionally(ex -> {
+                    log.error("Failed to close user data stream", ex);
+                    return null;
+                });
+    }
+    // -------------------- Positions --------------------
+    public List<PositionInformationV3ResponseInner> getPositions(String symbol) {
+        ApiResponse<PositionInformationV3Response> response = restApi.positionInformationV3(symbol, 500L);
+        List<PositionInformationV3ResponseInner> positions = response.getData();
+
+        // Update DataPool so UI observers get notified
+        try {
+            dataPool.setPositions(positions);
+        } catch (Exception e) {
+            log.warn("Failed to set positions into DataPool", e);
+        }
+
+        return positions;
+    }
+
+    // -------------------- Symbol Configuration --------------------
+    public Long getSymbolConfiguration(String symbol) {
+        ApiResponse<SymbolConfigurationResponse> response = restApi.symbolConfiguration(symbol, 500L);
+        SymbolConfigurationResponse config = response.getData();
+        for (SymbolConfigurationResponseInner symbolConfigurationResponseInner : config) {
+            if (symbolConfigurationResponseInner.getSymbol().equalsIgnoreCase(symbol)) {
+                Long leverage = symbolConfigurationResponseInner.getLeverage();
+                dataPool.setLeverage(leverage); // 设置到DataPool
+                return leverage;
+            }
+        }
+        log.info("Symbol configuration for {}: {}", symbol, config);
+        dataPool.setLeverage(null); // 如果没找到，设置为null
+        return null;
+    }
+
+    // ---------------------- Commission Rate ----------------------
+    public void getCommissionRate(String symbol) {
+        ApiResponse<UserCommissionRateResponse> response = restApi.userCommissionRate(symbol, 500L);
+        UserCommissionRateResponse commissionRate = response.getData();
+        log.info("Commission rate for {}: {}", symbol, commissionRate);
+        // 同步到DataPool
+        DataPool.getInstance().setCommissionRate(commissionRate);
+    }
+
+
+
+    // -------------------- Shutdown --------------------
+
+    public void shutdown() {
+        // Attempt to close remote user data stream first
+        try {
+            if (accountListenKey != null) {
+                closeAccountUpdateStream();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to call closeAccountUpdateStream during shutdown", e);
+        }
+
+        // Stop local stream/thread and cancel scheduled task
+        try {
+            stopAccountUpdateStream();
+        } catch (Exception e) {
+            log.warn("Failed to stop account update stream during shutdown", e);
+        }
+
+        // cancel scheduled keep-alive if any
+        if (accountKeepAliveFuture != null && !accountKeepAliveFuture.isDone()) {
+            accountKeepAliveFuture.cancel(true);
+        }
+        try {
+            accountScheduler.shutdownNow();
+        } catch (Exception e) {
+            log.warn("Failed to shutdown account scheduler cleanly", e);
+        }
+        log.info("Shutting down account update stream");
+    }
+
+    @Override
+    public void destroy() {
+        shutdown();
+    }
 }

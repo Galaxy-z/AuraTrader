@@ -2,6 +2,8 @@ package com.galaxy.auratrader.model;
 
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.AllOrdersResponseInner;
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.FuturesAccountBalanceV2ResponseInner;
+import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.PositionInformationV3ResponseInner;
+import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.UserCommissionRateResponse;
 import com.galaxy.auratrader.service.IndicatorService.IndicatorResult;
 import lombok.Getter;
 
@@ -28,6 +30,22 @@ public class DataPool {
     // 新增：订单列表
     @Getter
     private List<AllOrdersResponseInner> orders = Collections.emptyList();
+
+    // 新增：通知历史
+    @Getter
+    private List<Notification> notifications = Collections.emptyList();
+
+    // 新增：持仓列表（Positions）
+    @Getter
+    private List<PositionInformationV3ResponseInner> positions = Collections.emptyList();
+
+    // 新增：杠杆率
+    @Getter
+    private Long leverage;
+
+    // 新增：手续费率
+    @Getter
+    private UserCommissionRateResponse commissionRate; // 可根据UserCommissionRateResponse类型替换Object
 
     private DataPool() {}
 
@@ -66,6 +84,39 @@ public class DataPool {
         notifyObservers(DataType.ORDERS);
     }
 
+    // 新增：设置持仓并通知
+    public void setPositions(List<PositionInformationV3ResponseInner> positions) {
+        this.positions = positions != null ? positions : Collections.emptyList();
+        notifyObservers(DataType.POSITIONS);
+    }
+
+    // 新增：设置杠杆率并通知
+    public void setLeverage(Long leverage) {
+        this.leverage = leverage;
+        notifyObservers(DataType.LEVERAGE);
+    }
+
+    // 新增：设置手续费率并通知
+    public void setCommissionRate(UserCommissionRateResponse commissionRate) {
+        this.commissionRate = commissionRate;
+        notifyObservers(DataType.COMMISSION_RATE);
+    }
+
+    // 新增：设置或追加通知
+    public void setNotifications(List<Notification> notifications) {
+        this.notifications = notifications != null ? notifications : Collections.emptyList();
+        notifyObservers(DataType.NOTIFICATIONS);
+    }
+
+    public void addNotification(Notification notification) {
+        if (notification == null) return;
+        // Use a copy-on-write strategy: create a new list with the new notification appended
+        List<Notification> newList = new java.util.ArrayList<>(this.notifications);
+        newList.add(0, notification); // newest first
+        this.notifications = java.util.Collections.unmodifiableList(newList);
+        notifyObservers(DataType.NOTIFICATIONS);
+    }
+
     public void addObserver(DataPoolObserver observer) {
         observers.add(observer);
     }
@@ -81,6 +132,6 @@ public class DataPool {
     }
 
     public enum DataType {
-        KLINE, BALANCE, INDICATOR, PAIR, INTERVAL, ORDERS
+        KLINE, BALANCE, INDICATOR, PAIR, INTERVAL, ORDERS, NOTIFICATIONS, POSITIONS, LEVERAGE, COMMISSION_RATE
     }
 }

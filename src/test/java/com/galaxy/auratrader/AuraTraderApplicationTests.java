@@ -37,7 +37,7 @@ class AuraTraderApplicationTests {
     @Test
     void chat(){
 //        chatter.chat();
-        binanceService.accountUpdateStream();
+//        binanceService.accountUpdateStream();
 
         try {
             Thread.sleep(50000);
