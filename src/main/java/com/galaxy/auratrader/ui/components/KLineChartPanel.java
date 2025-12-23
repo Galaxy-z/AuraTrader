@@ -1,5 +1,6 @@
 package com.galaxy.auratrader.ui.components;
 
+import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.PositionInformationV3ResponseInner;
 import com.galaxy.auratrader.model.KlineData;
 import com.galaxy.auratrader.service.IndicatorService;
 import com.galaxy.auratrader.service.IndicatorService.IndicatorPoint;
@@ -36,6 +37,8 @@ public class KLineChartPanel extends JPanel {
     private final ChartPanel chartPanel;
     private List<KlineData> currentData = new ArrayList<>();
     private IndicatorResult indicators = null;
+    private List<PositionInformationV3ResponseInner> positions = new ArrayList<>();
+    private List<com.binance.connector.client.derivatives_trading_usds_futures.rest.model.AllOrdersResponseInner> orders = new ArrayList<>();
 
     public KLineChartPanel() {
         setLayout(new BorderLayout());
@@ -81,6 +84,152 @@ public class KLineChartPanel extends JPanel {
                     } else {
                         dataArea = plotArea;
                     }
+
+                    // --- 持仓虚线绘制 ---
+                    if (positions != null && !positions.isEmpty()) {
+                        Graphics2D g2 = (Graphics2D) g.create();
+                        try {
+                            double minPrice = rangeAxis.getRange().getLowerBound();
+                            double maxPrice = rangeAxis.getRange().getUpperBound();
+                            double yMin = rangeAxis.valueToJava2D(minPrice, dataArea, mainPlot.getRangeAxisEdge());
+                            double yMax = rangeAxis.valueToJava2D(maxPrice, dataArea, mainPlot.getRangeAxisEdge());
+                            for (PositionInformationV3ResponseInner pos : positions) {
+                                if (pos == null) continue;
+                                double entryPrice = 0.0;
+                                try {
+                                    entryPrice = Double.parseDouble(pos.getEntryPrice());
+                                } catch (Exception ignore) {}
+                                if (entryPrice <= 0) continue;
+                                String side = pos.getPositionSide();
+                                if (side == null) side = "BOTH";
+                                Color lineColor = Color.GRAY;
+                                if ("LONG".equalsIgnoreCase(side)) lineColor = Color.GREEN;
+                                else if ("SHORT".equalsIgnoreCase(side)) lineColor = Color.RED;
+                                // 判断虚线y坐标
+                                double yEntry;
+                                boolean outOfRange = false;
+                                String label;
+                                if (entryPrice < minPrice) {
+                                    yEntry = yMin;
+                                    outOfRange = true;
+                                    label = "↓ " + String.format("%.2f", entryPrice);
+                                } else if (entryPrice > maxPrice) {
+                                    yEntry = yMax;
+                                    outOfRange = true;
+                                    label = "↑ " + String.format("%.2f", entryPrice);
+                                } else {
+                                    yEntry = rangeAxis.valueToJava2D(entryPrice, dataArea, mainPlot.getRangeAxisEdge());
+                                    label = String.format("%.2f", entryPrice);
+                                }
+                                // 画虚线
+                                Stroke oldStroke = g2.getStroke();
+                                g2.setColor(lineColor);
+                                g2.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{8, 8}, 0));
+                                g2.drawLine((int) dataArea.getMinX(), (int) yEntry, (int) dataArea.getMaxX(), (int) yEntry);
+                                g2.setStroke(oldStroke);
+                                // 在最左侧标注价格（绿色/红色背景，白色字）
+                                // 计算盈亏额和回报率
+                                double positionAmt = 0.0, initialMargin = 0.0;
+                                try { positionAmt = Double.parseDouble(pos.getPositionAmt()); } catch (Exception ignore) {}
+                                try { initialMargin = Double.parseDouble(pos.getInitialMargin()); } catch (Exception ignore) {}
+
+                                double profit = 0.0;
+                                double absAmt = Math.abs(positionAmt);
+                                if ("LONG".equalsIgnoreCase(side)) {
+                                    profit = (latestPrice - entryPrice) * absAmt;
+                                } else if ("SHORT".equalsIgnoreCase(side)) {
+                                    profit = (entryPrice - latestPrice) * absAmt;
+                                }
+                                double roi = initialMargin != 0.0 ? profit / initialMargin : 0.0;
+                                // 获取成本币种
+                                String marginAsset = pos.getMarginAsset();
+                                if (marginAsset == null || marginAsset.isEmpty()) marginAsset = "";
+                                String profitStr = String.format("%.2f %s", profit, marginAsset);
+                                String roiStr = String.format("%.2f%%", roi * 100);
+                                String infoLabel = label + "  " + profitStr + " / " + roiStr;
+                                // 盈亏颜色
+                                Color infoBg = profit >= 0 ? new Color(0, 180, 0) : new Color(220, 0, 0);
+                                // 标注区域
+                                Font font = g2.getFont().deriveFont(Font.BOLD, 12f);
+                                g2.setFont(font);
+                                FontMetrics fm = g2.getFontMetrics(font);
+                                int infoWidth = fm.stringWidth(infoLabel);
+                                int infoHeight = fm.getHeight();
+                                int x = (int) (dataArea.getMinX() + 4);
+                                int y = (int) yEntry - 2;
+                                if (y < dataArea.getMinY() + infoHeight) y = (int) (dataArea.getMinY() + infoHeight);
+                                if (y > dataArea.getMaxY() - 2) y = (int) (dataArea.getMaxY() - 2);
+                                int arc = 8;
+                                int padX = 6, padY = 2;
+                                int rectW = infoWidth + padX * 2;
+                                int rectH = infoHeight;
+                                int rectX = x - padX;
+                                int rectY = y - fm.getAscent() - padY;
+                                g2.setColor(infoBg);
+                                g2.fillRoundRect(rectX, rectY, rectW, rectH, arc, arc);
+                                g2.setColor(Color.WHITE);
+                                g2.drawString(infoLabel, x, y);
+                            }
+                        } finally {
+                            g2.dispose();
+                        }
+                    }
+                    // --- 持仓虚线绘制结束 ---
+
+                    // --- 订单箭头绘制 ---
+                    if (orders != null && !orders.isEmpty()) {
+                        Graphics2D g2 = (Graphics2D) g.create();
+                        try {
+                            double minPrice = rangeAxis.getRange().getLowerBound();
+                            double maxPrice = rangeAxis.getRange().getUpperBound();
+                            double yMin = rangeAxis.valueToJava2D(minPrice, dataArea, mainPlot.getRangeAxisEdge());
+                            double yMax = rangeAxis.valueToJava2D(maxPrice, dataArea, mainPlot.getRangeAxisEdge());
+                            int arrowSize = 6;
+                            for (com.binance.connector.client.derivatives_trading_usds_futures.rest.model.AllOrdersResponseInner order : orders) {
+                                if (order == null || !"FILLED".equals(order.getStatus())) continue;
+                                String avgPriceStr = order.getAvgPrice();
+                                if (avgPriceStr == null || avgPriceStr.isEmpty()) continue;
+                                double avgPrice = 0.0;
+                                try {
+                                    avgPrice = Double.parseDouble(avgPriceStr);
+                                } catch (Exception ignore) { continue; }
+                                if (avgPrice <= 0) continue;
+                                String side = order.getSide();
+                                String positionSide = order.getPositionSide();
+                                if (side == null || positionSide == null) continue;
+                                boolean isBuy = "BUY".equalsIgnoreCase(side);
+                                boolean isLong = "LONG".equalsIgnoreCase(positionSide);
+                                Color arrowColor = isLong ? Color.GREEN : Color.RED;
+                                // 计算x坐标（时间轴）
+                                double timeValue = order.getTime();
+                                double xArrow = mainPlot.getDomainAxis().valueToJava2D(timeValue, dataArea, mainPlot.getDomainAxisEdge());
+                                // 计算y坐标
+                                double yArrow = rangeAxis.valueToJava2D(avgPrice, dataArea, mainPlot.getRangeAxisEdge());
+                                // 检查是否在显示区域内
+                                if (xArrow < dataArea.getMinX() || xArrow > dataArea.getMaxX() || avgPrice < minPrice || avgPrice > maxPrice) continue;
+                                // 绘制箭头
+                                g2.setColor(arrowColor);
+                                Polygon arrow = new Polygon();
+                                if (isBuy) {
+                                    // 向上箭头
+                                    arrow.addPoint((int) xArrow, (int) yArrow + arrowSize);
+                                    arrow.addPoint((int) xArrow - arrowSize, (int) yArrow - arrowSize);
+                                    arrow.addPoint((int) xArrow + arrowSize, (int) yArrow - arrowSize);
+                                } else {
+                                    // 向下箭头
+                                    arrow.addPoint((int) xArrow, (int) yArrow - arrowSize);
+                                    arrow.addPoint((int) xArrow - arrowSize, (int) yArrow + arrowSize);
+                                    arrow.addPoint((int) xArrow + arrowSize, (int) yArrow + arrowSize);
+                                }
+                                g2.fillPolygon(arrow);
+                                g2.setColor(Color.BLACK);
+                                g2.drawPolygon(arrow);
+                            }
+                        } finally {
+                            g2.dispose();
+                        }
+                    }
+                    // --- 订单箭头绘制结束 ---
 
                     // Convert latest price value to Java2D y coordinate
                     double yJava2D = rangeAxis.valueToJava2D(latestPrice, dataArea, mainPlot.getRangeAxisEdge());
@@ -197,6 +346,16 @@ public class KLineChartPanel extends JPanel {
         chartPanel.setChart(chart);
         // Repaint so the moving price label updates
         chartPanel.repaint();
+    }
+
+    public void setPositions(List<PositionInformationV3ResponseInner> positions) {
+        this.positions = positions != null ? positions : new ArrayList<>();
+        repaint();
+    }
+
+    public void setOrders(List<com.binance.connector.client.derivatives_trading_usds_futures.rest.model.AllOrdersResponseInner> orders) {
+        this.orders = orders != null ? orders : new ArrayList<>();
+        repaint();
     }
 
     private DefaultHighLowDataset createDataset(List<KlineData> klineDataList, String title) {

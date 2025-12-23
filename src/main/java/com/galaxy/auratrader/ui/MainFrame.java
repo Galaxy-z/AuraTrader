@@ -3,6 +3,7 @@ package com.galaxy.auratrader.ui;
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.AllOrdersResponseInner;
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.FuturesAccountBalanceV2ResponseInner;
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.UserCommissionRateResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.formdev.flatlaf.FlatLightLaf;
 import com.galaxy.auratrader.model.DataPool;
 import com.galaxy.auratrader.model.DataPoolObserver;
@@ -17,16 +18,17 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import javax.swing.*;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.text.DecimalFormat;
+import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
-import java.text.DecimalFormat;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Component
 @Profile("!test")
@@ -224,6 +226,7 @@ public class MainFrame extends JFrame implements DataPoolObserver {
         };
         ordersTable = new JTable(ordersTableModel);
         ordersTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        ordersTable.getColumnModel().getColumn(0).setCellRenderer(new DateRenderer());
         ordersTable.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseClicked(java.awt.event.MouseEvent e) {
@@ -318,6 +321,7 @@ public class MainFrame extends JFrame implements DataPoolObserver {
             public boolean isCellEditable(int row, int column) { return false; }
         };
         positionsTable = new JTable(positionsTableModel);
+        positionsTable.getColumnModel().getColumn(12).setCellRenderer(new DateRenderer());
         JScrollPane posScroll = new JScrollPane(positionsTable);
         positionsPanel.add(posScroll, BorderLayout.CENTER);
         JPanel posCtl = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -576,6 +580,9 @@ public class MainFrame extends JFrame implements DataPoolObserver {
                     }
                 }
                 ordersTableModel.fireTableDataChanged();
+                // --- 新增：同步订单到K线图 ---
+                chartPanel.setOrders(orders);
+                chartPanel.repaint();
             } else if (type == DataPool.DataType.NOTIFICATIONS) {
                 // Update notifications list UI and show transient popup for the newest notification
                 List<Notification> notifications = DataPool.getInstance().getNotifications();
@@ -589,6 +596,13 @@ public class MainFrame extends JFrame implements DataPoolObserver {
                 if (!notificationsListModel.isEmpty()) {
                     Notification top = notificationsListModel.get(0);
                     showTransientNotification(top.getTitle(), top.getMessage());
+                    // 新增：根据通知类型触发刷新
+                    if ("订单交易更新".equals(top.getTitle())) {
+                        refreshPositions();
+                        refreshOrders();
+                    } else if ("账户更新".equals(top.getTitle())) {
+                        loadBalance();
+                    }
                 }
             } else if (type == DataPool.DataType.POSITIONS) {
                 // Update positions table using a safe Map conversion so we don't rely on SDK getters
@@ -643,6 +657,9 @@ public class MainFrame extends JFrame implements DataPoolObserver {
                     }
                 }
                 positionsTableModel.fireTableDataChanged();
+                // --- 新增：同步持仓到K线图 ---
+                chartPanel.setPositions(DataPool.getInstance().getPositions());
+                chartPanel.repaint();
             } else if (type == DataPool.DataType.LEVERAGE || type == DataPool.DataType.COMMISSION_RATE) {
                 // 同时展示杠杆率和手续费
                 Long leverage = DataPool.getInstance().getLeverage();
@@ -677,7 +694,8 @@ public class MainFrame extends JFrame implements DataPoolObserver {
             try { sb.append("side: ").append(order.getSide()).append('\n'); } catch (Exception ignored) {}
             try { sb.append("positionSide: ").append(order.getPositionSide()).append('\n'); } catch (Exception ignored) {}
             try { sb.append("status: ").append(order.getStatus()).append('\n'); } catch (Exception ignored) {}
-            try { sb.append("executedQty: ").append(order.getExecutedQty()).append('\n'); } catch (Exception ignored) {}
+            try { sb.append("executedQty: ").append(order.getExecutedQty()).append('\n');
+            } catch (Exception ignored) {}
             try { sb.append("origQty: ").append(order.getOrigQty()).append('\n'); } catch (Exception ignored) {}
             try { sb.append("price: ").append(order.getPrice()).append('\n'); } catch (Exception ignored) {}
             try { sb.append("time: ").append(order.getTime()).append('\n'); } catch (Exception ignored) {}
@@ -730,6 +748,19 @@ public class MainFrame extends JFrame implements DataPoolObserver {
     }
 
     // Lightweight pie chart panel that visualizes balances as a pie with a simple legend.
+    private static class DateRenderer extends DefaultTableCellRenderer {
+        private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+        @Override
+        protected void setValue(Object value) {
+            if (value instanceof Date) {
+                setText(sdf.format((Date) value));
+            } else {
+                super.setValue(value);
+            }
+        }
+    }
+
     private static class PieChartPanel extends JPanel {
         private List<FuturesAccountBalanceV2ResponseInner> balances;
         private static final DecimalFormat DF = new DecimalFormat("#,##0.00");
@@ -808,6 +839,25 @@ public class MainFrame extends JFrame implements DataPoolObserver {
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
