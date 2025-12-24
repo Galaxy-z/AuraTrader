@@ -30,7 +30,7 @@ public class IndicatorService {
     @Data
     @AllArgsConstructor
     public static class IndicatorPoint {
-        @JsonFormat(pattern = "yyyyMMdd HH:mm:ss", timezone = "GMT+8")
+        @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
         private Date time;
         private double value;
     }

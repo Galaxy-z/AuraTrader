@@ -10,13 +10,13 @@ import java.util.Date;
 @Data
 @AllArgsConstructor
 public class KlineData {
-    @JsonFormat(pattern = "yyyyMMdd HH:mm:ss", timezone = "GMT+8")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private Date openTime;
     private BigDecimal open;
     private BigDecimal high;
     private BigDecimal low;
     private BigDecimal close;
     private BigDecimal volume;
-    @JsonFormat(pattern = "yyyyMMdd HH:mm:ss", timezone = "GMT+8")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private Date closeTime;
 }

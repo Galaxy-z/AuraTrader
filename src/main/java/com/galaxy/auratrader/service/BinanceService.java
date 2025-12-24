@@ -65,6 +65,23 @@ public class BinanceService implements DisposableBean {
     }
 
     public List<KlineData> getKlineData(String symbol, String intervalStr) {
+        return getKlineData(symbol, intervalStr, null, null, 100L);
+    }
+
+    /**
+     * Fetch klines, optionally within a time range. If startTime/endTime are null the method
+     * will fetch the latest `limit` candles and replace the cache. If a time range is provided
+     * (for example when loading earlier data), the returned klines will be merged into the
+     * existing cache: earlier candles will be prepended (avoid duplicates), and DataPool will be updated.
+     *
+     * @param symbol      trading pair symbol
+     * @param intervalStr interval string like "1m","5m" etc.
+     * @param startTime   optional start timestamp in ms (inclusive)
+     * @param endTime     optional end timestamp in ms (inclusive)
+     * @param limit       max number of candles to fetch
+     * @return list of fetched klines (in ascending openTime order)
+     */
+    public List<KlineData> getKlineData(String symbol, String intervalStr, Long startTime, Long endTime, Long limit) {
         // 更新 DataPool 中的当前选择（保证其它 UI / 观察者能读取）
         DataPool.getInstance().setCurrentPair(symbol);
         DataPool.getInstance().setCurrentInterval(intervalStr);
@@ -73,29 +90,71 @@ public class BinanceService implements DisposableBean {
         Interval interval = Interval.valueOf("INTERVAL_" + intervalStr);
 
         ApiResponse<KlineCandlestickDataResponse> response = restApi.klineCandlestickData(
-                symbol, interval, null, null, 50L
+                symbol, interval, startTime, endTime, limit
         );
         KlineCandlestickDataResponse data = response.getData();
 
-        List<KlineData> klineDataList = new ArrayList<>();
+        List<KlineData> fetched = new ArrayList<>();
         for (KlineCandlestickDataResponseItem item : data) {
-            klineDataList.add(parseKlineData(item));
+            fetched.add(parseKlineData(item));
         }
 
-        // Update cache
-        synchronized (cachedKlineData) {
-            cachedKlineData.clear();
-            cachedKlineData.addAll(klineDataList);
+        // Ensure data is sorted ascending by openTime
+        fetched.sort(Comparator.comparingLong(k -> k.getOpenTime().getTime()));
+
+        // If no explicit time range provided, replace cache with fetched latest
+        if (startTime == null && endTime == null) {
+            synchronized (cachedKlineData) {
+                cachedKlineData.clear();
+                cachedKlineData.addAll(fetched);
+            }
+        } else {
+            // Merge: if we're fetching earlier data (prepending), add unique earlier candles to head
+            synchronized (cachedKlineData) {
+                if (cachedKlineData.isEmpty()) {
+                    cachedKlineData.addAll(fetched);
+                } else {
+                    long firstExisting = cachedKlineData.get(0).getOpenTime().getTime();
+                    // collect toPrepend those with openTime < firstExisting
+                    List<KlineData> toPrepend = new ArrayList<>();
+                    for (KlineData k : fetched) {
+                        long t = k.getOpenTime().getTime();
+                        if (t < firstExisting) {
+                            toPrepend.add(k);
+                        }
+                    }
+                    // remove duplicates by timestamp
+                    Set<Long> existingTimes = new HashSet<>();
+                    for (KlineData k : cachedKlineData) existingTimes.add(k.getOpenTime().getTime());
+                    List<KlineData> finalPrepend = new ArrayList<>();
+                    for (KlineData k : toPrepend) {
+                        if (!existingTimes.contains(k.getOpenTime().getTime())) {
+                            finalPrepend.add(k);
+                        }
+                    }
+                    if (!finalPrepend.isEmpty()) {
+                        // prepend while keeping chronological order
+                        List<KlineData> newCache = new ArrayList<>();
+                        newCache.addAll(finalPrepend);
+                        newCache.addAll(cachedKlineData);
+                        cachedKlineData.clear();
+                        cachedKlineData.addAll(newCache);
+                    }
+                }
+            }
         }
-        dataPool.setKlineData(klineDataList); // 更新数据池
-        // Compute indicators and update data pool so UI can read index data from DataPool
+
+        // Update data pool and recompute indicators
+        List<KlineData> currentSnapshot = getCachedKlineData();
+        dataPool.setKlineData(currentSnapshot); // 更新数据池
         try {
-            var ind = indicatorService.computeIndicators(klineDataList, 20, 14);
+            var ind = indicatorService.computeIndicators(currentSnapshot, 20, 14);
             dataPool.setIndicators(ind);
         } catch (Exception e) {
             log.warn("Failed to compute indicators", e);
         }
-        return klineDataList;
+
+        return fetched;
     }
 
     private KlineData parseKlineData(KlineCandlestickDataResponseItem item) {
@@ -506,7 +565,7 @@ public class BinanceService implements DisposableBean {
 
     // ---------------------- Commission Rate ----------------------
     public void getCommissionRate(String symbol) {
-        ApiResponse<UserCommissionRateResponse> response = restApi.userCommissionRate(symbol, 500L);
+        ApiResponse<UserCommissionRateResponse> response = restApi.userCommissionRate(symbol, 5000L);
         UserCommissionRateResponse commissionRate = response.getData();
         log.info("Commission rate for {}: {}", symbol, commissionRate);
         // 同步到DataPool
@@ -549,5 +608,31 @@ public class BinanceService implements DisposableBean {
     @Override
     public void destroy() {
         shutdown();
+    }
+
+    /**
+     * Fetch earlier klines before current cached earliest candle.
+     * This computes a time range of `count` candles ending just before the earliest cached candle
+     * (or now if cache empty) and calls getKlineData with that range. The fetched candles will be
+     * prepended into the cache by getKlineData's merge logic.
+     *
+     * @param symbol trading pair
+     * @param intervalStr interval string like "1m"
+     * @param count number of candles to fetch
+     * @return list of fetched klines (ascending)
+     */
+    public List<KlineData> fetchEarlierKlines(String symbol, String intervalStr, int count) {
+        long endTime;
+        synchronized (cachedKlineData) {
+            if (cachedKlineData.isEmpty()) {
+                endTime = System.currentTimeMillis();
+            } else {
+                endTime = cachedKlineData.get(0).getOpenTime().getTime() - 1L;
+            }
+        }
+        long intervalMs = intervalToMillis(intervalStr);
+        long startTime = endTime - (long) count * intervalMs;
+        // Delegate to getKlineData which will merge/prepend
+        return getKlineData(symbol, intervalStr, startTime, endTime, (long) count);
     }
 }

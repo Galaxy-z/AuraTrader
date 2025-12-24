@@ -156,6 +156,8 @@ public class MainFrame extends JFrame implements DataPoolObserver {
 
         // Chart Panel
         chartPanel = new KLineChartPanel();
+        // provide service to panel so it can request earlier data when panned to left edge
+        chartPanel.setBinanceService(binanceService);
         // Create tabbed pane and add chart and balance tabs
         tabbedPane = new JTabbedPane();
 
@@ -839,47 +841,4 @@ public class MainFrame extends JFrame implements DataPoolObserver {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
