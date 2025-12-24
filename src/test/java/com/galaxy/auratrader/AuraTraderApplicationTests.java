@@ -1,6 +1,9 @@
 package com.galaxy.auratrader;
 
+import cn.hutool.json.JSONUtil;
+import com.binance.connector.client.common.ApiResponse;
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.api.DerivativesTradingUsdsFuturesRestApi;
+import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.CheckServerTimeResponse;
 import com.binance.connector.client.derivatives_trading_usds_futures.websocket.stream.api.DerivativesTradingUsdsFuturesWebSocketStreams;
 import com.galaxy.auratrader.llm.chat.Chatter;
 import com.galaxy.auratrader.service.BinanceService;
@@ -14,7 +17,7 @@ import org.springframework.test.context.ActiveProfiles;
 class AuraTraderApplicationTests {
 
     @Autowired
-    private DerivativesTradingUsdsFuturesRestApi derivativesTradingUsdsFuturesRestApi;
+    private DerivativesTradingUsdsFuturesRestApi restApi;
     @Autowired
     private DerivativesTradingUsdsFuturesWebSocketStreams derivativesTradingUsdsFuturesWebSocketStreams;
     @Autowired
@@ -36,14 +39,13 @@ class AuraTraderApplicationTests {
 
     @Test
     void chat(){
-//        chatter.chat();
-//        binanceService.accountUpdateStream();
 
-        try {
-            Thread.sleep(50000);
-        }catch (Exception e){
-            e.printStackTrace();
-        }
+        ApiResponse<CheckServerTimeResponse> response = restApi.checkServerTime();
+        System.out.println("Server time: " + response.getData().getServerTime());
+        response.getRateLimits().forEach(
+                (type, limit) ->
+                        System.out.println("Rate limit - " + type + ": " + JSONUtil.toJsonPrettyStr(limit))
+        );
     }
 
 }

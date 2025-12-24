@@ -58,9 +58,9 @@ public class DataTool {
     public String getKLineData(
             @AIParam(name = "pair", description = "交易对,如'ETHUSDT'") String pair,
             @AIParam(name = "interval", description = "数据的时间框架", type = "enum", enumValues = {"1m", "5m", "15m", "1h", "4h", "1d"}) String interval,
-            @AIParam(name = "starTime", description = "请求数据的起始时间,yyyy-MM-dd HH:mm:ss格式",required = false) String startTime,
+            @AIParam(name = "starTime", description = "请求数据的起始时间,不填默认返回最新数据，yyyy-MM-dd HH:mm:ss格式",required = false) String startTime,
             @AIParam(name = "endTime", description = "请求数据的结束时间，不填默认返回最新数据，yyyy-MM-dd HH:mm:ss格式",required = false) String endTime,
-            @AIParam(name = "limit", description = "请求的数据数量，默认值:500 最大值:1500", required = false, type = "number") Long limit
+            @AIParam(name = "limit", description = "请求的数据数量，默认值:500 最大值:500", required = false, type = "number") Long limit
     ) {
         Map<String, Object> result = new HashMap<>();
         ApiResponse<ContinuousContractKlineCandlestickDataResponse> response = restApi.continuousContractKlineCandlestickData(
