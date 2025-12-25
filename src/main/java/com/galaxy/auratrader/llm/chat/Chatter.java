@@ -156,7 +156,10 @@ public class Chatter {
                         },
                         error -> {
                             log.error("Error from deepSeekClient chat stream", error);
+                            // emit error to UI
                             sink.tryEmitNext(new MessageEvent(MessageEvent.Type.ERROR, "Stream error: " + error.getMessage(), null, null, false, seq.getAndIncrement()));
+                            // ensure the outer loop will stop after this round
+                            finishReason.append("stop");
                             countDownLatch.countDown();
                         }
                 );
@@ -213,7 +216,7 @@ public class Chatter {
 
                     ToolMessage toolMessage = ToolMessage.builder()
                             .toolCallId(value.getCallId())
-                            .content(value.getResult())
+                            .content(Objects.toString(value.getResult(), ""))
                             .build();
                     toolMessages.add(toolMessage);
                 }
@@ -300,6 +303,12 @@ public class Chatter {
                     }
 
 
+                },
+                error -> {
+                    log.error("Error from deepSeekClient chat stream in recursiveToolCall", error);
+                    // mark stop so we don't loop infinitely
+                    finishReason.append("stop");
+                    countDownLatch.countDown();
                 }
         );
 
@@ -348,7 +357,7 @@ public class Chatter {
         for (ToolCallContext value : toolCallMap.values()) {
             ToolMessage toolMessage = ToolMessage.builder()
                     .toolCallId(value.getCallId())
-                    .content(value.getResult())
+                    .content(Objects.toString(value.getResult(), ""))
                     .build();
             toolMessages.add(toolMessage);
         }

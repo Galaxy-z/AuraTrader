@@ -353,6 +353,7 @@ public class BinanceService implements DisposableBean {
     }
 
 
+
     // -------------------- Account Update Stream --------------------
     public void startAccountUpdateStream() {
         if (accountThread != null && accountThread.isAlive()) {
@@ -570,6 +571,19 @@ public class BinanceService implements DisposableBean {
         log.info("Commission rate for {}: {}", symbol, commissionRate);
         // 同步到DataPool
         DataPool.getInstance().setCommissionRate(commissionRate);
+    }
+
+    public void getExchangeInfo(String symbol) {
+        ApiResponse<ExchangeInformationResponse> exchangeInformationResponseApiResponse = restApi.exchangeInformation();
+        ExchangeInformationResponse exchangeInformation = exchangeInformationResponseApiResponse.getData();
+        // Store into DataPool for use by UI and other services
+        try {
+            DataPool.getInstance().setExchangeInfo(exchangeInformation);
+            log.info("Fetched exchange info and stored in DataPool: {}", exchangeInformation != null ? "present" : "null");
+        } catch (Exception e) {
+            log.warn("Failed to store exchange info into DataPool", e);
+        }
+
     }
 
 

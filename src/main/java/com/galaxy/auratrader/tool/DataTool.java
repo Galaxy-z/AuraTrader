@@ -11,6 +11,7 @@ import com.galaxy.auratrader.llm.annotation.AIParam;
 import com.galaxy.auratrader.llm.annotation.AITool;
 import com.galaxy.auratrader.model.DataPool;
 import com.galaxy.auratrader.model.KlineData;
+import com.galaxy.auratrader.service.BinanceService;
 import com.galaxy.auratrader.service.IndicatorService;
 import com.galaxy.auratrader.util.CommonUtil;
 import lombok.RequiredArgsConstructor;
@@ -36,22 +37,29 @@ public class DataTool {
     private final DerivativesTradingUsdsFuturesWebSocketApi webSocketApi;
 
     private final IndicatorService indicatorService;
+    private final BinanceService binanceService;
 
     @AITool(
-            name = "getCurrentPairsAndTimeFrame",
-            description = "获取当前交易对和时间周期",
+            name = "getCurrentTradeInfo",
+            description = "获取当前交易对、时间周期、杠杆率、手续费率等交易信息",
             category = "data",
             timeout = 1000
     )
     public String getCurrentPairsAndTimeFrame() {
         String currentPair = dataPool.getCurrentPair();
         String currentTimeFrame = dataPool.getCurrentInterval();
-        return "当前交易对: " + currentPair + ", 当前时间周期: " + currentTimeFrame;
+        List<FuturesAccountBalanceV2ResponseInner> balances = dataPool.getBalances();
+        Long leverage = dataPool.getLeverage();
+        UserCommissionRateResponse commissionRate = dataPool.getCommissionRate();
+        return "当前交易对: " + currentPair + ", 当前时间周期: " + currentTimeFrame +
+                ", 当前杠杆率: " + (leverage != null ? leverage : "未知") +
+                ", 当前手续费率: " + (commissionRate != null ? commissionRate : "未知") +
+                ", 账户余额: " + (balances != null && !balances.isEmpty() ? balances.toString() : "未知");
     }
 
     @AITool(
             name = "getKLineData",
-            description = "获取交易对的K线数据以及技术指标数据",
+            description = "获取交易对的K线数据以及技术指标数据，消耗token较多，请谨慎使用",
             category = "data",
             timeout = 2000
     )
@@ -98,14 +106,49 @@ public class DataTool {
         return new KlineData(openTime, open, high, low, close, volume, closeTime);
     }
 
-//    @AITool(name = "getIndicatorData", description = "获取当前交易对的技术指标数据", category = "data", timeout = 2000)
-//    public String getIndicatorData() {
-//        try {
-//            return objectMapper.writeValueAsString(dataPool.getIndicators());
-//        } catch (Exception e) {
-//            return "Error converting Indicator data to JSON: " + e.getMessage();
-//        }
-//    }
+    @AITool(
+            name = "getAllOpenOrders",
+            description = "获取当前全部挂单信息",
+            category = "data",
+            timeout = 1000
+    )
+    public String getAllOpenOrders(@AIParam(name = "symbol", description = "交易对,如'ETHUSDT'") String symbol) {
+        ApiResponse<CurrentAllOpenOrdersResponse> response = restApi.currentAllOpenOrders(symbol, 500L);
+        if (response.getStatusCode() != 200) {
+            return "Error fetching open orders: " + response;
+        }
+        try {
+            return objectMapper.writeValueAsString(response.getData());
+        } catch (Exception e) {
+            return "Error converting open orders to JSON: " + e.getMessage();
+        }
+    }
+
+    @AITool(
+            name = "getAllOpenAlgoOrders",
+            description = "获取当前全部条件挂单信息",
+            category = "data",
+            timeout = 1000
+    )
+    public String getAllOpenAlgoOrders(
+            @AIParam(name= "algoType", description = "条件挂单类型，不填返回所有类型", required = false) String algoType,
+            @AIParam(name = "symbol", description = "交易对,如'ETHUSDT'") String symbol,
+            @AIParam(name = "orderId", description = "条件单订单ID，不填返回所有订单", required = false) Long orderId
+    ) {
+        ApiResponse<CurrentAllAlgoOpenOrdersResponse> response = restApi.currentAllAlgoOpenOrders(algoType, symbol, orderId, 500L);
+        if (response.getStatusCode() != 200) {
+            return "Error fetching open algo orders: " + response;
+        }
+        try {
+            return objectMapper.writeValueAsString(response.getData());
+        } catch (Exception e) {
+            return "Error converting open algo orders to JSON: " + e.getMessage();
+        }
+    }
+
+
+
+
 
 
 }

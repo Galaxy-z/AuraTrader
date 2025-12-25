@@ -364,6 +364,12 @@ public class MainFrame extends JFrame implements DataPoolObserver {
                 String pair = (String) pairComboBox.getSelectedItem();
                 if (pair != null && !pair.isEmpty()) {
                     binanceService.getCommissionRate(pair);
+                    // Fetch exchange info once at startup and store into DataPool for later use
+                    try {
+                        binanceService.getExchangeInfo(pair);
+                    } catch (Exception ex) {
+                        log.warn("Failed to fetch exchange info at startup", ex);
+                    }
                 }
                 // Start account update stream
                 binanceService.startAccountUpdateStream();
