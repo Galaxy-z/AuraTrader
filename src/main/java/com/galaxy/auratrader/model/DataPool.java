@@ -5,6 +5,7 @@ import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.PositionInformationV3ResponseInner;
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.UserCommissionRateResponse;
 import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.ExchangeInformationResponse;
+import com.binance.connector.client.derivatives_trading_usds_futures.rest.model.SymbolConfigurationResponseInner;
 import com.galaxy.auratrader.service.IndicatorService.IndicatorResult;
 import lombok.Getter;
 
@@ -51,6 +52,10 @@ public class DataPool {
     // 新增：交易所信息（Exchange Information）
     @Getter
     private ExchangeInformationResponse exchangeInfo;
+
+    // 新增：最新的交易对配置对象（包含 marginType / maxNotionalValue / isAutoAddMargin 等）
+    @Getter
+    private SymbolConfigurationResponseInner symbolConfiguration;
 
     private DataPool() {}
 
@@ -107,6 +112,12 @@ public class DataPool {
         notifyObservers(DataType.COMMISSION_RATE);
     }
 
+    // 新增：设置 SymbolConfigurationResponseInner 并通知
+    public void setSymbolConfiguration(SymbolConfigurationResponseInner config) {
+        this.symbolConfiguration = config;
+        notifyObservers(DataType.SYMBOL_CONFIG);
+    }
+
     // 新增：设置或追加通知
     public void setNotifications(List<Notification> notifications) {
         this.notifications = notifications != null ? notifications : Collections.emptyList();
@@ -144,5 +155,6 @@ public class DataPool {
 
     public enum DataType {
         KLINE, BALANCE, INDICATOR, PAIR, INTERVAL, ORDERS, NOTIFICATIONS, POSITIONS, LEVERAGE, COMMISSION_RATE, EXCHANGE_INFO
+        , SYMBOL_CONFIG
     }
 }

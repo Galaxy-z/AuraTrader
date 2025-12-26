@@ -11,5 +11,6 @@ import java.util.List;
 @Data
 public class BinanceProperties {
     private List<String> pairs;
+    // Global recvWindow (milliseconds) to use for Binance REST calls. Default to 500ms.
+    private Long recvWindow = 500L;
 }
-

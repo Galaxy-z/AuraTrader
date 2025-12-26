@@ -35,6 +35,21 @@ public class AIChatFrame extends JFrame {
     private final Map<String, String> collapsibleStore = new HashMap<>();
     private int collapsibleCounter = 0;
 
+    // --- New fields for automation tab ---
+    private JTabbedPane tabbedPane;
+    private JPanel automationPanel;
+    private JTextField autoPromptField;
+    private JSpinner intervalSpinner; // seconds
+    private JButton startStopAutoButton;
+    private JLabel countdownLabel;
+    private javax.swing.Timer countdownTimer; // Swing timer for UI countdown
+    private volatile boolean autoRunning = false;
+    private int remainingSeconds = 0;
+    // -------------------------------------
+
+    // Maximum number of characters to render into the editor to keep UI responsive.
+    private static final int MAX_DISPLAY_CHARS = 20_000;
+
     public AIChatFrame(Chatter chatter) {
         this.chatter = chatter;
         initUI();
@@ -73,7 +88,48 @@ public class AIChatFrame extends JFrame {
         });
 
         JScrollPane scrollPane = new JScrollPane(chatPane);
-        add(scrollPane, BorderLayout.CENTER);
+
+        // Create a tabbed pane and add existing chat as the first tab (自由问答)
+        tabbedPane = new JTabbedPane();
+        JPanel qaPanel = new JPanel(new BorderLayout());
+        qaPanel.add(scrollPane, BorderLayout.CENTER);
+        tabbedPane.addTab("自由问答", qaPanel);
+
+        // --- Build automation tab ---
+        automationPanel = new JPanel(new BorderLayout());
+        JPanel topForm = new JPanel(new BorderLayout(6, 6));
+        autoPromptField = new JTextField();
+        autoPromptField.setToolTipText("自动化提示词（每次循环使用）");
+        topForm.add(new JLabel("提示词:"), BorderLayout.WEST);
+        topForm.add(autoPromptField, BorderLayout.CENTER);
+
+        JPanel rightControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        intervalSpinner = new JSpinner(new SpinnerNumberModel(60, 1, 86400, 1));
+        intervalSpinner.setToolTipText("间隔时间（秒），计时从模型完成后开始");
+        rightControls.add(new JLabel("间隔(s):"));
+        rightControls.add(intervalSpinner);
+
+        startStopAutoButton = new JButton("开始");
+        rightControls.add(startStopAutoButton);
+
+        countdownLabel = new JLabel("倒计时: -");
+        rightControls.add(countdownLabel);
+
+        topForm.add(rightControls, BorderLayout.EAST);
+
+        automationPanel.add(topForm, BorderLayout.NORTH);
+        // Instruction area in center
+        JTextArea instr = new JTextArea("自动化执行：输入提示词，设置间隔（秒），点击开始。注意：每次调用会等待模型输出结束（FINAL/onComplete）再开始计时。输出会写入聊天窗口。");
+        instr.setEditable(false);
+        instr.setLineWrap(true);
+        instr.setWrapStyleWord(true);
+        instr.setBackground(UIManager.getColor("Panel.background"));
+        instr.setBorder(BorderFactory.createEmptyBorder(6,6,6,6));
+        automationPanel.add(instr, BorderLayout.CENTER);
+
+        tabbedPane.addTab("自动化执行", automationPanel);
+
+        add(tabbedPane, BorderLayout.CENTER);
 
         JPanel inputPanel = new JPanel(new BorderLayout());
         inputField = new JTextField();
@@ -100,6 +156,15 @@ public class AIChatFrame extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 sendPrompt();
+            }
+        });
+
+        // Automation button action
+        startStopAutoButton.addActionListener(e -> {
+            if (!autoRunning) {
+                startAutomation();
+            } else {
+                stopAutomation();
             }
         });
     }
@@ -204,6 +269,141 @@ public class AIChatFrame extends JFrame {
         }
     }
 
+    // --- New automation methods ---
+    private void startAutomation() {
+        String prompt = autoPromptField.getText().trim();
+        if (prompt.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "请填写提示词。", "提示", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        autoRunning = true;
+        startStopAutoButton.setText("停止");
+        // Ensure inputs in automation tab are disabled while running
+        autoPromptField.setEnabled(false);
+        intervalSpinner.setEnabled(false);
+        // Kick off first run immediately
+        runAutomationOnce();
+    }
+
+    private void stopAutomation() {
+        autoRunning = false;
+        startStopAutoButton.setText("开始");
+        autoPromptField.setEnabled(true);
+        intervalSpinner.setEnabled(true);
+        stopCountdown();
+    }
+
+    private void runAutomationOnce() {
+        if (!autoRunning) return;
+        String prompt = autoPromptField.getText().trim();
+        if (prompt.isEmpty()) {
+            stopAutomation();
+            return;
+        }
+        // Append user message and AI label
+        preHtmlBuffer.append("<div><strong style='color:#0B66C3'>User:</strong> ").append(escapeHtml(prompt)).append("</div>");
+        preHtmlBuffer.append(MarkdownRenderer.renderToHtml("**AI:**"));
+        renderCurrentBuffer();
+
+        boolean enableThinking = deepThinkingCheckBox != null && deepThinkingCheckBox.isSelected();
+        // Start streaming. We rely on the subscribe onComplete to start the countdown (i.e., wait for model to finish)
+        chatter.streamToolCall(prompt, enableThinking).subscribe(ev -> {
+            switch (ev.type) {
+                case REASONING:
+                    if (ev.isPartial) {
+                        appendToLiveFragment(LiveFragment.Type.REASONING, ev.text);
+                        renderCurrentBuffer();
+                    } else {
+                        appendToLiveFragment(LiveFragment.Type.REASONING, ev.text);
+                        flushLiveFragmentsOfType(LiveFragment.Type.REASONING);
+                        renderCurrentBuffer();
+                    }
+                    break;
+                case CONTENT:
+                    if (ev.isPartial) {
+                        appendToLiveFragment(LiveFragment.Type.CONTENT, ev.text);
+                        renderCurrentBuffer();
+                    } else {
+                        appendToLiveFragment(LiveFragment.Type.CONTENT, ev.text);
+                        flushLiveFragmentsOfType(LiveFragment.Type.CONTENT);
+                        renderCurrentBuffer();
+                    }
+                    break;
+                case TOOL_CALL:
+                    flushLiveFragments();
+                    preHtmlBuffer.append(makeCollapsibleHtml("[Tool call: " + escapeHtml(ev.toolName == null ? "" : ev.toolName) + "]", ev.text == null ? "" : ev.text, "#6A1B9A"));
+                    renderCurrentBuffer();
+                    break;
+                case TOOL_RESULT:
+                    flushLiveFragments();
+                    preHtmlBuffer.append(makeCollapsibleHtml("[Tool result: " + escapeHtml(ev.toolName == null ? "" : ev.toolName) + "]", ev.text == null ? "" : ev.text, "#2E7D32"));
+                    renderCurrentBuffer();
+                    break;
+                case FINAL:
+                    flushLiveFragments();
+                    renderCurrentBuffer();
+                    // When model signals FINAL, start the countdown to next run
+                    SwingUtilities.invokeLater(() -> startCountdown());
+                    break;
+                case ERROR:
+                    flushLiveFragments();
+                    preHtmlBuffer.append(makeCollapsibleHtml("[Error]", ev.text == null ? ev.toolName == null ? "" : ev.toolName : ev.text, "#FF0000"));
+                    renderCurrentBuffer();
+                    SwingUtilities.invokeLater(() -> {
+                        JOptionPane.showMessageDialog(AIChatFrame.this, "自动化执行时发生错误：" + (ev.text == null ? ev.toolName : ev.text), "Error", JOptionPane.ERROR_MESSAGE);
+                    });
+                    // Stop automation on error
+                    SwingUtilities.invokeLater(() -> stopAutomation());
+                    break;
+            }
+        }, error -> {
+            flushLiveFragments();
+            SwingUtilities.invokeLater(() -> {
+                JOptionPane.showMessageDialog(AIChatFrame.this, "AI error: " + error.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                stopAutomation();
+            });
+        }, () -> {
+            // onComplete: ensure countdown started if not already (some providers may call onComplete instead of FINAL)
+            flushLiveFragments();
+            SwingUtilities.invokeLater(() -> startCountdown());
+        });
+    }
+
+    private void startCountdown() {
+        // Cancel existing timer first
+        stopCountdown();
+        if (!autoRunning) return;
+        Object val = intervalSpinner.getValue();
+        int secs = 60;
+        if (val instanceof Number) secs = ((Number) val).intValue();
+        remainingSeconds = Math.max(0, secs);
+        countdownLabel.setText("倒计时: " + remainingSeconds + "s");
+        countdownTimer = new javax.swing.Timer(1000, e -> {
+            remainingSeconds--;
+            if (remainingSeconds < 0) remainingSeconds = 0;
+            countdownLabel.setText("倒计时: " + remainingSeconds + "s");
+            if (remainingSeconds <= 0) {
+                // stop timer and trigger next run
+                stopCountdown();
+                if (autoRunning) {
+                    // Run next iteration on EDT to keep UI consistent
+                    SwingUtilities.invokeLater(() -> runAutomationOnce());
+                }
+            }
+        });
+        countdownTimer.setRepeats(true);
+        countdownTimer.start();
+    }
+
+    private void stopCountdown() {
+        if (countdownTimer != null) {
+            countdownTimer.stop();
+            countdownTimer = null;
+        }
+        countdownLabel.setText("倒计时: -");
+    }
+    // --- End automation methods ---
+
     // render preHtmlBuffer + live reasoning span (if any) into the editor
     private void renderCurrentBuffer() {
         StringBuilder full = new StringBuilder();
@@ -211,18 +411,39 @@ public class AIChatFrame extends JFrame {
         // append live fragments in-order as inline spans
         for (LiveFragment f : liveFragments) {
             if (f.type == LiveFragment.Type.REASONING) {
-                if (f.text.length() > 0) {
+                if (!f.text.isEmpty()) {
                     full.append("<span style='color:gray;font-style:italic'>").append(escapeHtml(f.text.toString())).append("</span>");
                 }
             } else if (f.type == LiveFragment.Type.CONTENT) {
-                if (f.text.length() > 0) {
+                if (!f.text.isEmpty()) {
                     // Render live content fragments as Markdown so markdown appears in real-time
                     full.append(MarkdownRenderer.renderToHtml(f.text.toString()));
                 }
             }
         }
-        MarkdownRenderer.setHtmlSafe(chatPane, full.toString());
+        // Truncate the HTML for display to keep the UI responsive while preserving the full buffer internally.
+        String displayHtml = truncateHtmlTail(full.toString(), MAX_DISPLAY_CHARS);
+        MarkdownRenderer.setHtmlSafe(chatPane, displayHtml);
         SwingUtilities.invokeLater(() -> chatPane.setCaretPosition(chatPane.getDocument().getLength()));
+    }
+
+    // Truncate the HTML to the trailing portion not exceeding maxChars. Try to cut at a <div boundary
+    // so we don't break tags. If we had to truncate, prepend a small notice.
+    private String truncateHtmlTail(String html, int maxChars) {
+        if (html == null) return "";
+        if (html.length() <= maxChars) return html;
+        int startSearch = Math.max(0, html.length() - maxChars);
+        // look for last occurrence of a message-like start (<div) within the tail region
+        int idx = html.lastIndexOf("<div", html.length() - 1);
+        if (idx >= startSearch) {
+            String tail = html.substring(idx);
+            String notice = "<div style='color:gray;font-size:small'>&hellip; (仅显示最近部分)</div>";
+            return notice + tail;
+        }
+        // fallback: just take the last maxChars chars and prepend a notice
+        String tail = html.substring(html.length() - maxChars);
+        String notice = "<div style='color:gray;font-size:small'>&hellip; (仅显示最近部分)</div>";
+        return notice + tail;
     }
 
     // Flush all live fragments (commit them into preHtmlBuffer) preserving order

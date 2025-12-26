@@ -668,16 +668,41 @@ public class MainFrame extends JFrame implements DataPoolObserver {
                 // --- 新增：同步持仓到K线图 ---
                 chartPanel.setPositions(DataPool.getInstance().getPositions());
                 chartPanel.repaint();
-            } else if (type == DataPool.DataType.LEVERAGE || type == DataPool.DataType.COMMISSION_RATE) {
-                // 同时展示杠杆率和手续费
+            } else if (type == DataPool.DataType.LEVERAGE || type == DataPool.DataType.COMMISSION_RATE || type == DataPool.DataType.SYMBOL_CONFIG) {
+                // 同时展示杠杆率、手续费以及交易对的额外配置（marginType / maxNotionalValue / isAutoAddMargin）
                 Long leverage = DataPool.getInstance().getLeverage();
                 UserCommissionRateResponse commissionRate = DataPool.getInstance().getCommissionRate();
+                com.binance.connector.client.derivatives_trading_usds_futures.rest.model.SymbolConfigurationResponseInner cfg = DataPool.getInstance().getSymbolConfiguration();
                 String commissionText = "手续费: N/A";
                 if (commissionRate != null) {
-                    commissionText = "手续费: " + " 挂单：" + Double.parseDouble(commissionRate.getMakerCommissionRate())*100 + "%  " +
-                            " 吃单：" + Double.parseDouble(commissionRate.getTakerCommissionRate())*100 + "%";
+                    try {
+                        commissionText = "手续费: " + " 挂单：" + (Double.parseDouble(commissionRate.getMakerCommissionRate())*100) + "%  " +
+                                " 吃单：" + (Double.parseDouble(commissionRate.getTakerCommissionRate())*100) + "%";
+                    } catch (Exception ex) {
+                        commissionText = "手续费: N/A";
+                    }
                 }
-                String text = "杠杆率: " + (leverage != null ? leverage.toString() : "N/A") + "    " + commissionText;
+
+                String marginType = "N/A";
+                String maxNotional = "N/A";
+                String autoAdd = "N/A";
+                if (cfg != null) {
+                    try {
+                        marginType = cfg.getMarginType() != null ? cfg.getMarginType().toString() : "N/A";
+                    } catch (Exception ignored) {}
+                    try {
+                        // maxNotionalValue may be BigDecimal or String depending on SDK; use toString safely
+                        Object m = cfg.getMaxNotionalValue();
+                        maxNotional = m != null ? String.valueOf(m) : "N/A";
+                    } catch (Exception ignored) {}
+                    try {
+                        Object a = cfg.getIsAutoAddMargin();
+                        autoAdd = a != null ? String.valueOf(a) : "N/A";
+                    } catch (Exception ignored) {}
+                }
+
+                String text = "杠杆率: " + (leverage != null ? leverage.toString() : "N/A") + "    " + commissionText +
+                        "    marginType: " + marginType + "    maxNotionalValue: " + maxNotional + "    isAutoAddMargin: " + autoAdd;
                 statusBar.setText(text);
             }
          });

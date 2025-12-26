@@ -124,7 +124,7 @@ public class Chatter {
                             }
                             if (delta.toolCalls() != null) {
                                 for (ToolCall toolCall : delta.toolCalls()) {
-                                    log.info(toolCall.toString());
+//                                    log.info(toolCall.toString());
                                     Integer index = toolCall.index();
                                     if (toolCallMap.containsKey(index)) {
                                         ToolCallContext toolCallContext = toolCallMap.get(index);

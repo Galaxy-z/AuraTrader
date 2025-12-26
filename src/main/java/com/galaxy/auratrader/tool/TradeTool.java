@@ -14,6 +14,7 @@ import com.galaxy.auratrader.llm.annotation.AIParam;
 import com.galaxy.auratrader.llm.annotation.AITool;
 import com.galaxy.auratrader.model.DataPool;
 import com.galaxy.auratrader.service.BinanceService;
+import com.galaxy.auratrader.config.BinanceProperties;
 import com.galaxy.auratrader.util.CommonUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -31,6 +32,7 @@ public class TradeTool {
     private final DerivativesTradingUsdsFuturesWebSocketApi webSocketApi;
 
     private final BinanceService binanceService;
+    private final BinanceProperties binanceProperties;
 
 
     @AITool(name = "order",
@@ -153,7 +155,7 @@ public class TradeTool {
         } else request.setSelfTradePreventionMode(SelfTradePreventionMode.EXPIRE_MAKER);
         Long goodTillDateTimestamp = CommonUtil.dateToUnixTimestampMillis(goodTillDate);
         if (goodTillDate != null) request.setGoodTillDate(goodTillDateTimestamp);
-        request.setRecvWindow(500L);
+        request.setRecvWindow(binanceProperties.getRecvWindow());
 
         // Basic validations per API docs
         // priceMatch 和 price 不能同时传
@@ -235,9 +237,9 @@ public class TradeTool {
             @AIParam(name = "triggerPrice", description = "触发价格", required = false) String triggerPrice,
             @AIParam(name = "workingType", description = "触发类型: MARK_PRICE(标记价格), CONTRACT_PRICE(合约最新价). 默认 CONTRACT_PRICE", type = "enum", enumValues = {"MARK_PRICE", "CONTRACT_PRICE"}) String workingType,
             @AIParam(name = "priceMatch", description = "价格匹配方式，可选：OPPONENT/OPPONENT_5/OPPONENT_10/OPPONENT_20/QUEUE/QUEUE_5/QUEUE_10/QUEUE_20；不能与 price 同时传", required = false) String priceMatch,
-            @AIParam(name = "closePosition", description = "是否为触发平仓单; true/false，触发后全部平仓，仅支持STOP_MARKET和TAKE_PROFIT_MARKET；不与quantity合用；自带只平仓效果，不与reduceOnly 合用", required = false, type = "enum", enumValues = {"true", "false"}) String closePosition,
-            @AIParam(name = "priceProtect", description = "是否开启条件单触发保护，值示例：true/false", required = false, type = "enum", enumValues = {"true", "false"}) String priceProtect,
-            @AIParam(name = "reduceOnly", description = "是否仅减仓。非双开模式下默认 false；双开模式下不接受此参数，值示例：true/false", required = false) String reduceOnly,
+            @AIParam(name = "closePosition", description = "是否为触发平仓单; true/false，触发后全部平仓，仅支持STOP_MARKET和TAKE_PROFIT_MARKET；不与quantity合用；自带只平仓效果，不与reduceOnly 合用", required = false, type = "string", enumValues = {"true", "false"}) String closePosition,
+            @AIParam(name = "priceProtect", description = "是否开启条件单触发保护，值示例：true/false", required = false, type = "boolean", enumValues = {"true", "false"}) Boolean priceProtect,
+            @AIParam(name = "reduceOnly", description = "是否仅减仓。非双开模式下默认 false；双开模式下不接受此参数，值示例：true/false", required = false, type = "string", enumValues = {"true", "false"}) String reduceOnly,
             @AIParam(name = "activationPrice", description = "追踪止损激活价格，仅TRAILING_STOP_MARKET 需要此参数, 默认为下单当前市场价格(支持不同workingType)", required = false)
             String activationPrice,
             @AIParam(name = "callbackRate", description = "追踪止损回调比例，可取值范围[0.1, 10],其中 1代表1% ,仅TRAILING_STOP_MARKET 需要此参数", required = false) String callbackRate,
@@ -307,7 +309,7 @@ public class TradeTool {
 
         // Map closePosition and priceProtect (may be string flags in SDK)
         if (closePosition != null) request.setClosePosition(closePosition);
-        if (priceProtect != null) request.setPriceProtect(priceProtect);
+        if (priceProtect != null) request.setPriceProtect(priceProtect.toString().toLowerCase());
 
         // Map activationPrice (used by TRAILING_STOP_MARKET) and callbackRate
         if (activationPrice != null) {
@@ -342,7 +344,7 @@ public class TradeTool {
         } else request.setSelfTradePreventionMode(SelfTradePreventionMode.EXPIRE_MAKER);
         Long goodTillDateTimestamp = CommonUtil.dateToUnixTimestampMillis(goodTillDate);
         if (goodTillDate != null) request.setGoodTillDate(goodTillDateTimestamp);
-        request.setRecvWindow(500L);
+        request.setRecvWindow(binanceProperties.getRecvWindow());
 
         // Basic validations per API docs
         if (priceMatch != null && price != null) {
@@ -408,7 +410,7 @@ public class TradeTool {
             @AIParam(name = "algoId", description = "系统订单号", required = false, type = "number") Long algoId,
             @AIParam(name = "clientAlgoId", description = "用户自定义的订单号", required = false) String clientAlgoId
     ) {
-        ApiResponse<CancelAlgoOrderResponse> response = restApi.cancelAlgoOrder(algoId, clientAlgoId, 500L);
+        ApiResponse<CancelAlgoOrderResponse> response = restApi.cancelAlgoOrder(algoId, clientAlgoId, binanceProperties.getRecvWindow());
         try {
             return objectMapper.writeValueAsString(response.getData());
         } catch (Exception e) {
@@ -436,7 +438,7 @@ public class TradeTool {
             @AIParam(name = "orderId", description = "系统订单号", required = false, type = "number") Long orderId,
             @AIParam(name = "origClientOrderId", description = "用户自定义的订单号", required = false) String origClientOrderId
     ) {
-        ApiResponse<CancelOrderResponse> response = restApi.cancelOrder(symbol, orderId, origClientOrderId, 500L);
+        ApiResponse<CancelOrderResponse> response = restApi.cancelOrder(symbol, orderId, origClientOrderId, binanceProperties.getRecvWindow());
         try {
             return objectMapper.writeValueAsString(response.getData());
         } catch (Exception e) {

@@ -303,7 +303,7 @@ public class BinanceService implements DisposableBean {
 
     // ------------------- Account Balance ------------------
     public List<FuturesAccountBalanceV2ResponseInner> getAccountBalance() {
-        ApiResponse<FuturesAccountBalanceV3Response> response = restApi.futuresAccountBalanceV3(5000L);
+        ApiResponse<FuturesAccountBalanceV3Response> response = restApi.futuresAccountBalanceV3(binanceProperties.getRecvWindow());
         List<FuturesAccountBalanceV2ResponseInner> balances = response.getData();
         dataPool.setBalances(balances); // 更新数据池
         return balances;
@@ -342,7 +342,7 @@ public class BinanceService implements DisposableBean {
     //  }
     //]
     public List<AllOrdersResponseInner> getAllOrders(String symbol) {
-        ApiResponse<AllOrdersResponse> allOrdersResponseApiResponse = restApi.allOrders(symbol, null, null, null, null, 500L);
+        ApiResponse<AllOrdersResponse> allOrdersResponseApiResponse = restApi.allOrders(symbol, null, null, null, null, binanceProperties.getRecvWindow());
         AllOrdersResponse allOrders = allOrdersResponseApiResponse.getData();
         List<AllOrdersResponseInner> list = new ArrayList<>();
         for (AllOrdersResponseInner allOrder : allOrders) {
@@ -535,7 +535,7 @@ public class BinanceService implements DisposableBean {
     }
     // -------------------- Positions --------------------
     public List<PositionInformationV3ResponseInner> getPositions(String symbol) {
-        ApiResponse<PositionInformationV3Response> response = restApi.positionInformationV3(symbol, 500L);
+        ApiResponse<PositionInformationV3Response> response = restApi.positionInformationV3(symbol, binanceProperties.getRecvWindow());
         List<PositionInformationV3ResponseInner> positions = response.getData();
 
         // Update DataPool so UI observers get notified
@@ -549,24 +549,33 @@ public class BinanceService implements DisposableBean {
     }
 
     // -------------------- Symbol Configuration --------------------
-    public Long getSymbolConfiguration(String symbol) {
-        ApiResponse<SymbolConfigurationResponse> response = restApi.symbolConfiguration(symbol, 500L);
-        SymbolConfigurationResponse config = response.getData();
-        for (SymbolConfigurationResponseInner symbolConfigurationResponseInner : config) {
+    public com.binance.connector.client.derivatives_trading_usds_futures.rest.model.SymbolConfigurationResponseInner getSymbolConfiguration(String symbol) {
+        ApiResponse<com.binance.connector.client.derivatives_trading_usds_futures.rest.model.SymbolConfigurationResponse> response = restApi.symbolConfiguration(symbol, binanceProperties.getRecvWindow());
+        com.binance.connector.client.derivatives_trading_usds_futures.rest.model.SymbolConfigurationResponse data = response.getData();
+        if (data == null) {
+            log.info("Symbol configuration response was null for {}", symbol);
+            dataPool.setLeverage(null);
+            dataPool.setSymbolConfiguration(null);
+            return null;
+        }
+        for (com.binance.connector.client.derivatives_trading_usds_futures.rest.model.SymbolConfigurationResponseInner symbolConfigurationResponseInner : data) {
             if (symbolConfigurationResponseInner.getSymbol().equalsIgnoreCase(symbol)) {
                 Long leverage = symbolConfigurationResponseInner.getLeverage();
                 dataPool.setLeverage(leverage); // 设置到DataPool
-                return leverage;
+                // store the full symbol configuration for UI use
+                dataPool.setSymbolConfiguration(symbolConfigurationResponseInner);
+                return symbolConfigurationResponseInner;
             }
         }
-        log.info("Symbol configuration for {}: {}", symbol, config);
+        log.info("Symbol configuration for {}: {}", symbol, data);
         dataPool.setLeverage(null); // 如果没找到，设置为null
+        dataPool.setSymbolConfiguration(null);
         return null;
     }
 
     // ---------------------- Commission Rate ----------------------
     public void getCommissionRate(String symbol) {
-        ApiResponse<UserCommissionRateResponse> response = restApi.userCommissionRate(symbol, 5000L);
+        ApiResponse<UserCommissionRateResponse> response = restApi.userCommissionRate(symbol, binanceProperties.getRecvWindow());
         UserCommissionRateResponse commissionRate = response.getData();
         log.info("Commission rate for {}: {}", symbol, commissionRate);
         // 同步到DataPool

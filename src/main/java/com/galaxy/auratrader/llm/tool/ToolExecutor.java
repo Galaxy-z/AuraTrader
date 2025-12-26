@@ -154,18 +154,41 @@ public class ToolExecutor {
         Class<?> expectedType = param.getType();
 
         // 处理Optional类型
+        boolean isOptional = false;
         if (Optional.class.isAssignableFrom(expectedType)) {
+            isOptional = true;
             // 获取Optional的实际类型
             expectedType = getOptionalGenericType(param);
         }
 
         // 检查类型是否匹配
-        if (!isTypeCompatible(value, expectedType)) {
-            throw new IllegalArgumentException(String.format(
-                    "参数类型不匹配: 参数 '%s' 期望类型 %s，实际类型 %s",
-                    paramName, expectedType.getSimpleName(), value.getClass().getSimpleName()
-            ));
+        if (isTypeCompatible(value, expectedType)) {
+            return;
         }
+
+        // 如果类型不匹配，尝试进行宽松的类型转换（例如 String "true" -> Boolean.TRUE，或数字字符串 -> 数字）
+        try {
+            Object converted = convertValueToType(value, expectedType);
+            if (converted != null) {
+                // 如果转换后类型匹配，则接受（映射阶段会再次进行实际转换）
+                if (isTypeCompatible(converted, expectedType) || expectedType.isInstance(converted)) {
+                    return;
+                }
+            } else {
+                // converted == null: 对于基本类型这是不接受的
+                if (!expectedType.isPrimitive()) {
+                    return; // for reference types null is acceptable
+                }
+            }
+        } catch (Exception ex) {
+            // ignore conversion errors and throw below
+            log.debug("参数 {} 的宽松转换失败，准备抛出类型不匹配异常", paramName);
+        }
+
+        throw new IllegalArgumentException(String.format(
+                "参数类型不匹配: 参数 '%s' 期望类型 %s，实际类型 %s",
+                paramName, expectedType.getSimpleName(), value.getClass().getSimpleName()
+        ));
     }
 
     /**
@@ -474,3 +497,4 @@ public class ToolExecutor {
         }
     }
 }
+

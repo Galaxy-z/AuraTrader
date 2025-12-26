@@ -14,6 +14,7 @@ import com.galaxy.auratrader.model.KlineData;
 import com.galaxy.auratrader.service.BinanceService;
 import com.galaxy.auratrader.service.IndicatorService;
 import com.galaxy.auratrader.util.CommonUtil;
+import com.galaxy.auratrader.config.BinanceProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -38,6 +39,7 @@ public class DataTool {
 
     private final IndicatorService indicatorService;
     private final BinanceService binanceService;
+    private final BinanceProperties binanceProperties;
 
     @AITool(
             name = "getCurrentTradeInfo",
@@ -113,7 +115,7 @@ public class DataTool {
             timeout = 1000
     )
     public String getAllOpenOrders(@AIParam(name = "symbol", description = "交易对,如'ETHUSDT'") String symbol) {
-        ApiResponse<CurrentAllOpenOrdersResponse> response = restApi.currentAllOpenOrders(symbol, 500L);
+        ApiResponse<CurrentAllOpenOrdersResponse> response = restApi.currentAllOpenOrders(symbol, binanceProperties.getRecvWindow());
         if (response.getStatusCode() != 200) {
             return "Error fetching open orders: " + response;
         }
@@ -135,7 +137,7 @@ public class DataTool {
             @AIParam(name = "symbol", description = "交易对,如'ETHUSDT'") String symbol,
             @AIParam(name = "orderId", description = "条件单订单ID，不填返回所有订单", required = false) Long orderId
     ) {
-        ApiResponse<CurrentAllAlgoOpenOrdersResponse> response = restApi.currentAllAlgoOpenOrders(algoType, symbol, orderId, 500L);
+        ApiResponse<CurrentAllAlgoOpenOrdersResponse> response = restApi.currentAllAlgoOpenOrders(algoType, symbol, orderId, binanceProperties.getRecvWindow());
         if (response.getStatusCode() != 200) {
             return "Error fetching open algo orders: " + response;
         }
@@ -145,8 +147,6 @@ public class DataTool {
             return "Error converting open algo orders to JSON: " + e.getMessage();
         }
     }
-
-
 
 
 

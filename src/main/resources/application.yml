@@ -12,6 +12,14 @@ binance:
     - BTCUSDT
     - BNBUSDT
     - XRPUSDT
+  recv-window: 6000
+
+dingtalk:
+  access-token: 7c3d90782cfea80d1f4a165f8c9524f9a10fbcbe9e6e432d435543ceb80c3187
+  secret: SECd0669611a5828e02641900ba64f93ce19e1945f7c402f807f8e5c026441da737
+  default-at-mobiles: []
+  default-at-user-ids: []
+  default-at-all: false
 
 proxy:
   host: ${PROXY_HOST}
