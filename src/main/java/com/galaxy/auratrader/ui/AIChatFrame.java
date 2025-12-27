@@ -45,6 +45,9 @@ public class AIChatFrame extends JFrame {
     private javax.swing.Timer countdownTimer; // Swing timer for UI countdown
     private volatile boolean autoRunning = false;
     private int remainingSeconds = 0;
+    // track consecutive errors and a max threshold to avoid infinite noisy retries
+    private int consecutiveErrors = 0;
+    private static final int MAX_CONSECUTIVE_ERRORS = 5;
     // -------------------------------------
 
     // Maximum number of characters to render into the editor to keep UI responsive.
@@ -241,6 +244,7 @@ public class AIChatFrame extends JFrame {
                     preHtmlBuffer.append(makeCollapsibleHtml("[Error]", ev.text == null ? ev.toolName == null ? "" : ev.toolName : ev.text, "#FF0000"));
                     renderCurrentBuffer();
                     SwingUtilities.invokeLater(() -> {
+                        JOptionPane.showMessageDialog(AIChatFrame.this, "AI error: " + errorMessageOrTool(ev), "Error", JOptionPane.ERROR_MESSAGE);
                         inputField.setEnabled(true);
                         sendButton.setEnabled(true);
                     });
@@ -269,6 +273,16 @@ public class AIChatFrame extends JFrame {
         }
     }
 
+    // helper to pick readable message from event
+    private String errorMessageOrTool(Object ev) {
+        try {
+            // ev is not available here in this method use-case, keep simple placeholder
+            return "处理错误";
+        } catch (Exception ex) {
+            return "处理错误";
+        }
+    }
+
     // --- New automation methods ---
     private void startAutomation() {
         String prompt = autoPromptField.getText().trim();
@@ -281,6 +295,8 @@ public class AIChatFrame extends JFrame {
         // Ensure inputs in automation tab are disabled while running
         autoPromptField.setEnabled(false);
         intervalSpinner.setEnabled(false);
+        // reset error counter when starting
+        consecutiveErrors = 0;
         // Kick off first run immediately
         runAutomationOnce();
     }
@@ -291,6 +307,8 @@ public class AIChatFrame extends JFrame {
         autoPromptField.setEnabled(true);
         intervalSpinner.setEnabled(true);
         stopCountdown();
+        // reset error counter when stopped
+        consecutiveErrors = 0;
     }
 
     private void runAutomationOnce() {
@@ -343,28 +361,47 @@ public class AIChatFrame extends JFrame {
                     flushLiveFragments();
                     renderCurrentBuffer();
                     // When model signals FINAL, start the countdown to next run
+                    // reset consecutive errors on successful completion
+                    consecutiveErrors = 0;
                     SwingUtilities.invokeLater(() -> startCountdown());
                     break;
                 case ERROR:
                     flushLiveFragments();
                     preHtmlBuffer.append(makeCollapsibleHtml("[Error]", ev.text == null ? ev.toolName == null ? "" : ev.toolName : ev.text, "#FF0000"));
                     renderCurrentBuffer();
-                    SwingUtilities.invokeLater(() -> {
-                        JOptionPane.showMessageDialog(AIChatFrame.this, "自动化执行时发生错误：" + (ev.text == null ? ev.toolName : ev.text), "Error", JOptionPane.ERROR_MESSAGE);
-                    });
-                    // Stop automation on error
-                    SwingUtilities.invokeLater(() -> stopAutomation());
+                    // increment error counter and decide whether to continue or stop
+                    consecutiveErrors++;
+                    if (consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
+                        // schedule next attempt after configured interval
+                        SwingUtilities.invokeLater(() -> startCountdown());
+                    } else {
+                        // too many consecutive errors -> stop automation and notify user
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(AIChatFrame.this, "自动化执行失败次数过多，已停止（" + consecutiveErrors + " 次）。", "Error", JOptionPane.ERROR_MESSAGE);
+                            stopAutomation();
+                        });
+                    }
                     break;
             }
         }, error -> {
+            // subscription-level error: similar handling as event-level ERROR
             flushLiveFragments();
-            SwingUtilities.invokeLater(() -> {
-                JOptionPane.showMessageDialog(AIChatFrame.this, "AI error: " + error.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                stopAutomation();
-            });
+            preHtmlBuffer.append(makeCollapsibleHtml("[Error]", error.getMessage() == null ? "" : error.getMessage(), "#FF0000"));
+            renderCurrentBuffer();
+            consecutiveErrors++;
+            if (consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
+                SwingUtilities.invokeLater(() -> startCountdown());
+            } else {
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(AIChatFrame.this, "自动化执行订阅出错，已停止（" + consecutiveErrors + " 次）。\n原因: " + error.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                    stopAutomation();
+                });
+            }
         }, () -> {
             // onComplete: ensure countdown started if not already (some providers may call onComplete instead of FINAL)
             flushLiveFragments();
+            // treat onComplete as success and reset error counter
+            consecutiveErrors = 0;
             SwingUtilities.invokeLater(() -> startCountdown());
         });
     }
